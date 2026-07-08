@@ -11,15 +11,26 @@
 
 ## ✨ Features
 
-- **5-Agent Architecture** — Supervisor orchestrates Explorer, Coder, Reviewer, and Executor
-- **Plan Mode** — Read-only planning phase with explicit user approval (Claude Code style)
-- **Sub-agents** — Parallel task dispatch via LangGraph's `Send` primitive
-- **Multi-Client** — Vue 3 Web SPA + `cw` CLI + FastAPI backend
-- **Streaming** — SSE-based token-by-token output
-- **Checkpoint & Resume** — PostgreSQL-backed conversation persistence
-- **Auto-Compaction** — Context window management with intelligent summarization
-- **Skills & MCP** — Extensible via Markdown skills and Model Context Protocol
-- **Harness Engineering** — Explicit 6-element design philosophy for reliable agents
+### ✅ Done (Phase 1 + Phase 2)
+
+- **Multi-Agent Architecture** — Supervisor orchestrates Explorer / Coder / Reviewer / Executor / Compact
+- **Tool System** — `ToolRegistry` + 6 tools: `read_file` / `write_file` / `edit_file` / `grep_files` / `run_bash` / `todo_write`
+- **WORK_DIR Sandbox** — All file tools enforce work-directory boundary
+- **HITL Permission** — Dangerous bash commands pause graph for human approval via `langgraph.types.interrupt`
+- **Standard ReAct** — Executor ⇄ Tools dual-node loop with `Command.goto` routing
+- **Plan Mode** — Read-only tool filtering via `plan_mode_safe` flag
+- **Checkpoint & Resume** — PostgreSQL `PostgresSaver` for conversation persistence
+- **Real LLM Verified** — End-to-end runs with DeepSeek v4-flash / v4-pro
+
+### 🔜 Planned (Phase 3–7)
+
+- **Auto-Compaction** — Context window management with intelligent summarization (Phase 3)
+- **Sub-agents** — Parallel task dispatch via LangGraph `Send` primitive (Phase 3)
+- **SSE Streaming** — Token-by-token output via FastAPI (Phase 4)
+- **Vue 3 Web SPA** — Primary client (Phase 5)
+- **`cw` CLI** — Terminal client (Phase 6)
+- **Skills & MCP** — Markdown skills + Model Context Protocol (Phase 7)
+- **Nginx + Docker Demo** — One-command production setup (Phase 7)
 
 ## 🏗️ Architecture
 
@@ -62,24 +73,41 @@
 ## 🚀 Quick Start
 
 ```bash
-# 1. Start infrastructure
+# 1. Start infrastructure (PostgreSQL + Redis)
 docker compose up -d
 
-# 2. Install backend
-cd backend
-uv sync
-cp .env.example .env  # configure LLM API key
+# 2. Install backend dependencies
+uv sync --all-packages
 
-# 3. Install frontend
-cd ../frontend
-pnpm install
-pnpm dev
+# 3. Configure env (set real API key)
+cp .env.example .env
+# Edit .env: set OPENAI_API_KEY=sk-... and MODEL_NAME=deepseek-v4-flash
 
-# 4. Install CLI
-cd ../cli
-uv sync
-cw  # start CLI client
+# 4. Run tests (73 unit + 5 integration, ~1.5s)
+uv run --project backend python -m pytest backend/tests/
+
+# 5. Verify end-to-end with real LLM
+#    Expected output: HumanMessage → AIMessage(tool_call) → ToolMessage → AIMessage(final answer)
+cd D:/Mini_Code && PATH="$HOME/.cache/mimocode/bin:$PATH" uv run --project backend python -c "
+from codeweave.graphs.execute_graph import build_execute_graph
+from langgraph.checkpoint.memory import InMemorySaver
+from langchain_core.messages import HumanMessage
+app = build_execute_graph().compile(checkpointer=InMemorySaver())
+r = app.invoke(
+    {'messages': [HumanMessage(content='用 read_file 读 backend/src/codeweave/tools/registry.py,简要回答。')],
+     'todos': [], 'plan_mode': False, 'agent_history': []},
+    config={'configurable': {'thread_id': 'demo'}, 'recursion_limit': 15},
+)
+print('agent_history:', [h['decision'] for h in r['agent_history']])
+print('final answer:', r['messages'][-1].content[:200])
+"
+
+# 6. Frontend (Phase 5) / CLI (Phase 6) — coming soon
+# cd ../frontend && pnpm install && pnpm dev
+# cd ../cli && uv sync && cw
 ```
+
+**Note:** All `uv run` commands must be run from the project root `D:/Mini_Code/` (not from `backend/`) — `pydantic-settings` resolves `.env` relative to CWD.
 
 ## 🛠️ Tech Stack
 
@@ -111,12 +139,23 @@ The "harness" is everything around the model: tools, context, constraints, loops
 
 ```
 codeweave/
-├── backend/           # FastAPI + LangGraph Agent
-├── frontend/          # Vue 3 SPA
-├── cli/               # cw terminal client
-├── skills/            # Built-in Skills
-├── deploy/            # Nginx + Docker config
-├── docs/              # Architecture & demo docs
+├── backend/
+│   ├── src/codeweave/
+│   │   ├── agents/     # supervisor / explorer / coder / reviewer / executor / compact
+│   │   ├── graphs/     # root / plan_graph / execute_graph
+│   │   ├── state/      # RootState / PlanState / ExecuteState + reducers
+│   │   ├── tools/      # ✅ registry + file_tools + bash_tools + todo_tools
+│   │   ├── persistence/  # PostgresSaver
+│   │   ├── config/     # Settings + model provider
+│   │   ├── api/        # (Phase 4) FastAPI routes
+│   │   ├── services/   # (Phase 4) Celery + token tracker
+│   │   └── prompts/    # (Phase 4) Jinja2 templates
+│   └── tests/          # 73 unit + 5 integration
+├── frontend/          # (Phase 5) Vue 3 SPA
+├── cli/               # (Phase 6) cw terminal client
+├── skills/            # (Phase 7) Built-in Skills
+├── deploy/            # (Phase 7) Nginx + Docker config
+├── docs/superpowers/  # Specs & plans (local only, gitignored)
 └── docker-compose.yml
 ```
 
