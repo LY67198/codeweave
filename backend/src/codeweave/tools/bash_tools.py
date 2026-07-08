@@ -34,4 +34,65 @@ def is_dangerous(cmd: str) -> bool:
     return any(p.search(cmd) for p in _COMPILED)
 
 
-# run_bash 在 Task 7 追加
+# ---------------------------------------------------------------------------
+# run_bash:执行 shell 命令,危险模式触发 HITL interrupt(Task 7)
+# ---------------------------------------------------------------------------
+
+import subprocess
+from typing import Annotated
+
+from langchain_core.tools import ToolException
+from langgraph.types import interrupt
+
+from codeweave.tools.registry import register
+
+
+# 输出截断上限
+_MAX_OUTPUT = 10_000
+# 超时秒数
+_BASH_TIMEOUT = 30
+
+
+@register(name="run_bash", plan_mode_safe=False, requires_permission=True, category="bash")
+def run_bash(
+    command: Annotated[str, "要执行的 shell 命令"],
+) -> str:
+    """在 shell 中执行一条命令。
+
+    危险命令(如 ``rm -rf /`` / ``dd of=/dev/sda`` / ``mkfs`` / fork bomb /
+    全开权限 / 远程脚本直跑)会触发 HITL interrupt,暂停 graph 等待用户批准。
+
+    Args:
+        command: 完整 shell 命令。
+
+    Returns:
+        stdout 字符串(超 _MAX_OUTPUT 字符则截断)。
+
+    Raises:
+        ToolException: 超时、用户拒绝、或子进程错误。
+    """
+    if is_dangerous(command):
+        approval = interrupt({
+            "type": "bash_permission_required",
+            "command": command,
+            "reason": "matched dangerous pattern",
+        })
+        if not approval.get("approved"):
+            raise ToolException(f"用户拒绝执行: {command}")
+
+    try:
+        proc = subprocess.run(
+            command,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=_BASH_TIMEOUT,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as e:
+        raise ToolException(f"Bash 超时(>{_BASH_TIMEOUT}s): {command}") from e
+
+    output = (proc.stdout or "") + (proc.stderr or "")
+    if len(output) > _MAX_OUTPUT:
+        output = output[:_MAX_OUTPUT] + f"\n[truncated, {len(output) - _MAX_OUTPUT} more chars]"
+    return output
