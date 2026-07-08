@@ -41,10 +41,19 @@ def pytest_configure(config):  # noqa: ARG001
     # (no psycopg2), so the project's URL must use the +psycopg dialect. Unit
     # tests that only inspect metadata don't open a connection. Integration
     # tests that DO connect should set their own DATABASE_URL.
-    os.environ.setdefault(
-        "DATABASE_URL",
-        "postgresql+psycopg://codeweave:codeweave_dev@localhost:5432/codeweave",
-    )
+    if "DATABASE_URL" not in os.environ:
+        os.environ["DATABASE_URL"] = (
+            "postgresql+psycopg://codeweave:codeweave_dev@localhost:5432/codeweave"
+        )
+    else:
+        # 用户在 env 传的 DATABASE_URL,强制加 +psycopg 后缀(若未指定 dialect),
+        # 避免 SQLAlchemy 默认去 import psycopg2 而抛 ModuleNotFoundError。
+        existing = os.environ["DATABASE_URL"]
+        if existing.startswith("postgresql://") and "+psycopg" not in existing \
+                and "+psycopg2" not in existing:
+            os.environ["DATABASE_URL"] = existing.replace(
+                "postgresql://", "postgresql+psycopg://", 1,
+            )
 
 
 @pytest.fixture
