@@ -1,0 +1,94 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.uv/
+
+# uv
+uv.lock
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Environment & secrets (NEVER push)
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+secrets/
+*.secret
+
+# Claude / memory / private files (NEVER push)
+.claude/
+CLAUDE.md
+AGENTS.md
+GEMINI.md
+
+# Design documents & specs (NEVER push - private planning)
+docs/superpowers/
+docs/private/
+docs/internal/
+*.design.md
+
+# Project specific
+.codeweave/
+.skills/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.nuxt/
+frontend/.output/
+frontend/.env.local
+
+# Logs
+logs/
+*.log
+
+# Databases (NEVER push)
+*.db
+*.sqlite
+*.sqlite3
+pg_data/
+redis_data/
+
+# OS
+.DS_Store
+desktop.ini
