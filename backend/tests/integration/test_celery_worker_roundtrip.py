@@ -112,17 +112,19 @@ _SKIPIF = pytest.mark.skipif(_SKIP, reason=_SKIP_REASON)
 def worker_proc():
     """启一个 Celery worker 子进程真走 Redis broker。
 
-    broker / result backend 强制改写为 ``memory://`` / ``cache+memory://``,
-    让 worker 进程不依赖 result backend 也能跑通 main worker 链路。
+    broker 必须用真实 Redis(``memory://`` 不跨进程边界,跨进程无共享),
+    result backend 用 cache+memory:// 避免 worker 等外部 Redis 回传。
     """
-    # backend cwd:`backend/` 包根,跨平台用 Path 而不是 /d/... hardcode
-    repo_root = Path(__file__).resolve().parents[2]
-    backend_cwd = repo_root / "backend"
+    # backend cwd:`backend/` 包根,跨平台用 Path 而不是 /d/... hardcode。
+    # parents[2] = backend/(例如 D:\Mini_Code\backend),
+    # parents[3] = 仓库根
+    backend_cwd = Path(__file__).resolve().parents[2]  # = .../backend
 
+    redis_broker = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/1")
     env = {
         **os.environ,
         "DATABASE_URL": _DATABASE_URL,
-        "CELERY_BROKER_URL": "memory://",
+        "CELERY_BROKER_URL": redis_broker,
         "CELERY_RESULT_BACKEND": "cache+memory://",
     }
 

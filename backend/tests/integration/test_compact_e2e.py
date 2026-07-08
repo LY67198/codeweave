@@ -88,8 +88,10 @@ def test_dispatch_then_apply_roundtrip():
         with patch("codeweave.tasks.compact.llm_summarize",
                    return_value=("SUMMARY", 50)), \
              patch("codeweave.tasks.compact._get_checkpointer") as ck:
-            ck.return_value.get_state.return_value.values = {
-                "messages": state["messages"],
+            # _get_checkpointer() → ck 走 get_tuple(PostgresSaver 直 API),
+            # 不是 CompiledStateGraph 的 get_state
+            ck.return_value.get_tuple.return_value.checkpoint = {
+                "channel_values": {"messages": state["messages"]},
             }
             from codeweave.tasks.compact import compact_thread as task_fn
             return task_fn.apply(args=[thread_id]).get()

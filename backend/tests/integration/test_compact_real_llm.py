@@ -89,17 +89,16 @@ def test_real_compact_roundtrip_deepseek():
         session.query(CompactResult).filter_by(thread_id=tid).delete()
         session.commit()
 
-    # 一条超阈值 HumanMessage,触发 keep_first / keep_last 选择有意义
+    # 多条 HumanMessage(30 条,每条约 100 token),让 choose_compact_range 真的
+    # 有中间区可压缩 — 单条消息下 keep_last_n=6 > len 会让中间区为空,
+    # compact 任务提前返回 nothing_to_compact,无法验证 LLM 摘要闭环。
+    long_content = ("CodeWeave 是一个 LangGraph 多 Agent 编码助手。 "
+                    "它包含 supervisor / explorer / coder / reviewer / "
+                    "executor / compact 五个核心 Agent 节点,"
+                    "由 supervisor 协调探索、编码、审阅、执行、压缩"
+                    "多个工作环节,像织机编织代码一样协作。" * 30)
     state = {
-        "messages": [
-            HumanMessage(
-                content=("CodeWeave 是一个 LangGraph 多 Agent 编码助手。 "
-                         "它包含 supervisor / explorer / coder / reviewer / "
-                         "executor / compact 五个核心 Agent 节点,"
-                         "由 supervisor 协调探索、编码、审阅、执行、压缩"
-                         "多个工作环节,像织机编织代码一样协作。" * 200)
-            )
-        ],
+        "messages": [HumanMessage(content=long_content) for _ in range(30)],
         "thread_id": tid,
     }
 
@@ -108,8 +107,10 @@ def test_real_compact_roundtrip_deepseek():
     def fake_dispatch(thread_id: str) -> str:
         """fake dispatch 回调:同步跑 task body,真 LLM 真 Postgres。"""
         with patch("codeweave.tasks.compact._get_checkpointer") as ck:
-            ck.return_value.get_state.return_value.values = {
-                "messages": state["messages"],
+            # _get_checkpointer() → ck with get_tuple() (PostgresSaver 直 API,
+            # 不是 CompiledStateGraph 的 get_state)
+            ck.return_value.get_tuple.return_value.checkpoint = {
+                "channel_values": {"messages": state["messages"]},
             }
             from codeweave.tasks.compact import compact_thread as task_fn
 

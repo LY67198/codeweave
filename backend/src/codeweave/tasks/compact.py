@@ -84,13 +84,22 @@ def compact_thread(self: Any, thread_id: str) -> str:
         写入的 ``compact_results.id``(UUID 字符串);若 nothing-to-compact
         返回空串。
     """
-    # 1. 读 messages
+    # 1. 读 messages(spec §4.3)。PostgresSaver 没有 .get_state() —— 那是
+    # CompiledStateGraph 的方法; saver 本身提供 get_tuple(),从 tuple
+    # checkpoint['channel_values'] 读 messages。
     try:
-        checkpointer = _get_checkpointer()
-        state = checkpointer.get_state(  # type: ignore[attr-defined]
+        ck = _get_checkpointer()
+        chkpnt_tuple = ck.get_tuple(  # type: ignore[attr-defined]
             {"configurable": {"thread_id": thread_id}}
         )
-        messages = state.values["messages"]
+        if chkpnt_tuple is None:
+            _audit.emit(
+                "compact_failed",
+                {"reason": "no_checkpoint_for_thread", "messages_total": 0},
+                thread_id=thread_id,
+            )
+            return ""
+        messages = chkpnt_tuple.checkpoint.get("channel_values", {}).get("messages", [])
     except Exception as exc:
         _audit.emit("compact_failed", {"reason": str(exc)}, thread_id=thread_id)
         raise self.retry(exc=exc) from exc

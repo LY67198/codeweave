@@ -59,7 +59,7 @@ def test_compact_thread_writes_status_done_when_reduction(
     # 30 条 HumanMessage,每条 50 token,首条系统消息保留,后 6 条保留
     sys_msg = SystemMessage(content="sys")
     long_msgs = [sys_msg] + [HumanMessage(content="x " * 100) for _ in range(99)]
-    fake_checkpointer.get_state.return_value.values = {"messages": long_msgs}
+    fake_checkpointer.get_tuple.return_value.checkpoint = {"channel_values": {"messages": long_msgs}}
 
     _stub_audit(monkeypatch)
     tracker_stub = _stub_tracker(monkeypatch)
@@ -96,7 +96,7 @@ def test_compact_thread_marks_no_reduction(
     sys_msg = SystemMessage(content="sys")
     # 5 条短消息,即使 keep_last=6 也基本无可压缩区间
     msgs = [sys_msg, HumanMessage(content="hi"), HumanMessage(content="ho")]
-    fake_checkpointer.get_state.return_value.values = {"messages": msgs}
+    fake_checkpointer.get_tuple.return_value.checkpoint = {"channel_values": {"messages": msgs}}
 
     _stub_audit(monkeypatch)
     _stub_tracker(monkeypatch)
@@ -127,7 +127,7 @@ def test_compact_thread_creates_row_when_no_pending(
     """库里没有 pending row → 任务自己 INSERT 一条新的并设 status。"""
     sys_msg = SystemMessage(content="sys")
     long_msgs = [sys_msg] + [HumanMessage(content="x " * 100) for _ in range(50)]
-    fake_checkpointer.get_state.return_value.values = {"messages": long_msgs}
+    fake_checkpointer.get_tuple.return_value.checkpoint = {"channel_values": {"messages": long_msgs}}
 
     _stub_audit(monkeypatch)
     _stub_tracker(monkeypatch)
@@ -163,7 +163,7 @@ def test_compact_thread_retries_on_llm_failure(
     """LLM 抛异常 → self.retry 被调用一次,audit emit compact_failed。"""
     sys_msg = SystemMessage(content="sys")
     long_msgs = [sys_msg] + [HumanMessage(content="x " * 100) for _ in range(50)]
-    fake_checkpointer.get_state.return_value.values = {"messages": long_msgs}
+    fake_checkpointer.get_tuple.return_value.checkpoint = {"channel_values": {"messages": long_msgs}}
 
     audit_stub = _stub_audit(monkeypatch)
     _stub_tracker(monkeypatch)
