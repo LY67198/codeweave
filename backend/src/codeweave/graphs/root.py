@@ -1,3 +1,8 @@
+"""Root Graph —— 顶层 StateGraph,组合 Plan 与 Execute 两个 Subgraph。
+
+目前流程为 ``START -> execute -> END``,完整的 plan-mode 中断逻辑
+将在第三阶段加入。
+"""
 from langgraph.graph import END, START, StateGraph
 
 from codeweave.config.settings import get_settings
@@ -8,13 +13,14 @@ from codeweave.state.schemas import RootState
 
 
 def build_root_graph(checkpointer=None):
-    """构建顶层 StateGraph，包含 Plan 和 Execute 两个 Subgraph。
+    """构建顶层 StateGraph,包含 Plan 和 Execute 两个 Subgraph。
 
     Args:
-        checkpointer: 可选的 PostgresSaver 实例。若为 None，则使用默认实例。
+        checkpointer: 可选的 ``PostgresSaver`` 实例。若为 None,则使用
+            ``get_checkpointer()`` 获取默认实例。
 
     Returns:
-        已编译的图，可直接用于 invoke/stream。
+        已编译的图,可直接用于 ``invoke`` / ``stream``。
     """
     settings = get_settings()
 

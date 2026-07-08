@@ -27,13 +27,31 @@ Decide the next agent. Be decisive.
 
 
 class SupervisorDecision(BaseModel):
-    """来自 Supervisor 的结构化决策结果。"""
+    """来自 Supervisor 的结构化决策结果。
+
+    Attributes:
+        next: 下一个要运行的 Agent 名称,或 ``FINISH`` 表示任务结束。
+        reason: 决策的简短理由,默认为空字符串。
+    """
     next: Literal["supervisor", "explorer", "coder", "reviewer", "executor", "compact", "FINISH"]
     reason: str = Field(default="")
 
 
 def supervisor_node(state: RootState) -> Command:
-    """根据当前状态决策下一个运行的 Agent。"""
+    """根据当前 state 决策下一个要运行的 Agent。
+
+    使用 LangChain 的 ``with_structured_output`` 让 LLM 返回强类型
+    ``SupervisorDecision``,然后通过 ``Command(update=..., goto=...)``
+    同时完成 state 更新和路由。
+
+    Args:
+        state: 当前 graph state,包含 messages、todos、plan_mode、
+            agent_history 等字段。
+
+    Returns:
+        LangGraph ``Command`` 对象,包含 state 更新(追加到 ``agent_history``)
+        和下一个节点的 ``goto`` 目标(若决策为 ``FINISH`` 则 ``goto="__end__"``)。
+    """
     llm = get_chat_model()
     structured_llm = llm.with_structured_output(SupervisorDecision)
 
