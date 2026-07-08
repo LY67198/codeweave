@@ -22,7 +22,7 @@ def build_root_graph(checkpointer=None):
     Returns:
         已编译的图,可直接用于 ``invoke`` / ``stream``。
     """
-    settings = get_settings()
+    get_settings()  # 触发 Settings 单例初始化
 
     plan_subgraph = build_plan_graph().compile()
     execute_subgraph = build_execute_graph().compile()

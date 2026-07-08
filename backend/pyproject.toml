@@ -68,8 +68,9 @@ ignore_missing_imports = true
 module = "codeweave.db.migrations.versions.*"
 disallow_untyped_calls = false
 
-# 既有基线错误:config/settings.py:72 — get_settings() 调 Settings() 时未传
-# 必填的 openai_api_key,Task 17 处理。这里放宽让 strict 跑通。
+# 既有基线错误:config/settings.py:85 — get_settings() 调 Settings() 时未传
+# 必填的 openai_api_key。Pydantic 2 + env 加载的修复等 Phase 4 一并处理。这里放宽
+# 让 strict 跑通剩下的 Phase 3 代码。
 [[tool.mypy.overrides]]
 module = "codeweave.config.settings"
 disallow_untyped_calls = false
