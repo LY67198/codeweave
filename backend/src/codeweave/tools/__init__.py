@@ -4,11 +4,22 @@
 """
 from __future__ import annotations
 
+from typing import Literal
+
+from langchain_core.tools import BaseTool
+
 from codeweave.tools.registry import ToolMeta, ToolRegistry, register, registry
 
 
-def get_tools_for_mode(mode: str) -> list:
-    """便捷函数:按模式返回工具列表。"""
+def get_tools_for_mode(mode: Literal["plan", "execute"]) -> list[BaseTool]:
+    """便捷函数:按模式返回工具列表。
+
+    Args:
+        mode: ``"plan"`` 只返 plan_mode_safe=True;``"execute"`` 返回全部。
+
+    Returns:
+        工具列表(BaseTool 实例)。
+    """
     return registry.get_tools_for_mode(mode)
 
 

@@ -6,9 +6,10 @@ todo_write 的返回值通过 ``merge_todos`` reducer 合并到 state.todos。
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Literal
+from typing import Any, Literal, cast
 
 from langchain_core.messages import AIMessage, BaseMessage
+from langchain_core.runnables import Runnable
 from langgraph.prebuilt import ToolNode
 from langgraph.types import Command
 
@@ -19,13 +20,13 @@ from codeweave.tools import get_tools_for_mode
 
 
 @lru_cache(maxsize=1)
-def _get_executor_model():
+def _get_executor_model() -> Any:
     """惰性初始化绑定工具的 LLM(避免模块加载时硬性依赖 langchain-openai)。"""
     return get_chat_model().bind_tools(get_tools_for_mode("execute"))
 
 
 @lru_cache(maxsize=1)
-def _get_executor_tool_node():
+def _get_executor_tool_node() -> ToolNode:
     """惰性初始化 ToolNode。"""
     return ToolNode(get_tools_for_mode("execute"))
 
@@ -48,7 +49,7 @@ def executor_node(state: RootState) -> Command[Literal["executor", "__end__"]]:
     model = _get_executor_model()
     tool_node = _get_executor_tool_node()
 
-    messages: list[BaseMessage] = list(state.get("messages", []))  # type: ignore[arg-type]
+    messages: list[BaseMessage] = list(state.get("messages") or [])
     response: AIMessage = model.invoke(messages)
     messages.append(response)
 
@@ -57,20 +58,21 @@ def executor_node(state: RootState) -> Command[Literal["executor", "__end__"]]:
 
     # 用 ToolNode 执行所有 tool_call
     tool_result = tool_node.invoke({"messages": [response]})
-    new_messages: list[BaseMessage] = tool_result["messages"]  # type: ignore[assignment]
+    new_messages: list[BaseMessage] = tool_result["messages"]
     messages.extend(new_messages)
 
     # 检查 todo_write 的返回,合并到 state.todos
-    todos_update: list[dict] = []
+    todos_update: list[dict[str, Any]] = []
     for msg in new_messages:
         # ToolMessage.content 是 str 或 list;todo_write 返回 list
         if hasattr(msg, "name") and getattr(msg, "name", "") == "todo_write":
             content = msg.content
             if isinstance(content, list):
-                todos_update = content  # type: ignore[assignment]
+                todos_update = cast(list[dict[str, Any]], content)
     if todos_update:
-        existing = list(state.get("todos", []))  # type: ignore[arg-type]
-        merged = merge_todos(existing, todos_update)
+        existing = list(state.get("todos") or [])
+        existing_dicts = cast(list[dict[str, Any]], existing)
+        merged = merge_todos(existing_dicts, todos_update)
         return Command(update={"messages": messages, "todos": merged}, goto="executor")
 
     return Command(update={"messages": messages}, goto="executor")
