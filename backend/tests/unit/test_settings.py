@@ -13,8 +13,11 @@ def test_settings_loads_from_env(monkeypatch):
     assert s.redis_url == "redis://host:6379/0"
     assert s.model_name == "test-model"
 
-def test_settings_has_defaults():
+def test_settings_has_defaults(monkeypatch):
+    """openai_api_key 是必填项,测试时也必须设置。"""
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     s = Settings(_env_file=None)
     assert s.compact_threshold == 32000
     assert s.compact_enabled is True
     assert s.plan_mode_default is True
+    assert s.model_name == "deepseek-v4-flash"

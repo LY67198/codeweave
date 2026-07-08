@@ -13,9 +13,10 @@ def test_get_chat_model_returns_chat_model():
         assert call_kwargs["temperature"] == 0.5
         assert mock_instance == model
 
-def test_get_chat_model_uses_settings():
+def test_get_chat_model_uses_settings(monkeypatch):
     from codeweave.config.settings import Settings
 
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     s = Settings(_env_file=None)
     with patch("codeweave.config.model.init_chat_model") as mock_init:
         mock_init.return_value = MagicMock()

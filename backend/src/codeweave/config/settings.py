@@ -9,9 +9,10 @@ class Settings(BaseSettings):
     配置项包括 LLM、数据库、Redis、上下文、限制和服务端口。
 
     Attributes:
-        openai_api_key: OpenAI 兼容 API Key。
+        openai_api_key: OpenAI 兼容 API Key(必填,无默认值)。
         openai_base_url: API 基础 URL(支持 DeepSeek/Qwen/GLM 等)。
-        model_name: 模型名称(如 deepseek-chat)。
+        model_name: 模型名称,默认 ``deepseek-v4-flash``(可换 ``deepseek-chat`` /
+            ``deepseek-reasoner`` / ``deepseek-v3-flash`` 等)。
         model_temperature: 模型温度参数,0.0 表示确定性输出。
         database_url: PostgreSQL 连接 URL。
         redis_url: Redis 连接 URL。
@@ -32,9 +33,10 @@ class Settings(BaseSettings):
     )
 
     # === LLM 配置 ===
-    openai_api_key: str = Field(default="sk-placeholder")
+    # openai_api_key 必填:启动时从环境变量 OPENAI_API_KEY 读取,缺失会立即报错
+    openai_api_key: str
     openai_base_url: str = Field(default="https://api.deepseek.com/v1")
-    model_name: str = Field(default="deepseek-chat")
+    model_name: str = Field(default="deepseek-v4-flash")
     model_temperature: float = Field(default=0.0)
 
     # === 数据库 ===
