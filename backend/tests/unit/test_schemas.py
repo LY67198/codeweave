@@ -11,16 +11,26 @@ def test_root_state_has_messages():
 
 
 def test_plan_state_inherits_root():
-    assert issubclass(PlanState, RootState)
-    hints = get_type_hints(PlanState)
-    assert "exploration_findings" in hints
+    # TypedDict doesn't support issubclass; verify fields instead
+    plan_hints = get_type_hints(PlanState)
+    root_hints = get_type_hints(RootState)
+    for key in root_hints:
+        assert key in plan_hints, f"PlanState missing {key} from RootState"
+    assert "exploration_findings" in plan_hints
+    assert "proposed_steps" in plan_hints
+    assert "approval_pending" in plan_hints
 
 
 def test_execute_state_inherits_root():
-    assert issubclass(ExecuteState, RootState)
-    hints = get_type_hints(ExecuteState)
-    assert "code_diffs" in hints
-    assert "review_iterations" in hints
+    # TypedDict doesn't support issubclass; verify fields instead
+    exec_hints = get_type_hints(ExecuteState)
+    root_hints = get_type_hints(RootState)
+    for key in root_hints:
+        assert key in exec_hints, f"ExecuteState missing {key} from RootState"
+    assert "code_diffs" in exec_hints
+    assert "review_iterations" in exec_hints
+    assert "last_review_feedback" in exec_hints
+    assert "test_results" in exec_hints
 
 
 def test_next_agent_literal_includes_all_agents():
