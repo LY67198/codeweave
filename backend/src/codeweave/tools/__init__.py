@@ -1,0 +1,29 @@
+"""CodeWeave 工具包。
+
+通过 import 各子模块触发 @register 装饰器,把工具登记到全局 registry。
+"""
+from __future__ import annotations
+
+from codeweave.tools.registry import ToolMeta, ToolRegistry, register, registry
+
+
+def get_tools_for_mode(mode: str) -> list:
+    """便捷函数:按模式返回工具列表。"""
+    return registry.get_tools_for_mode(mode)
+
+
+__all__ = [
+    "ToolMeta",
+    "ToolRegistry",
+    "register",
+    "registry",
+    "get_tools_for_mode",
+]
+
+
+# 触发子模块 import(让 @register 装饰器执行)
+# 注意:导入必须放在 __all__ 之后以避免循环引用
+# TODO(phase 2): re-enable when submodules are added in Tasks 2-8
+# from codeweave.tools import bash_tools  # noqa: E402, F401
+# from codeweave.tools import file_tools  # noqa: E402, F401
+# from codeweave.tools import todo_tools  # noqa: E402, F401
