@@ -7,7 +7,8 @@ Executor 与 tools 节点形成标准 ReAct 循环(Reasoning ⇄ Acting)。
 from langgraph.graph import END, START, StateGraph
 
 from codeweave.agents import (
-    coder_node, executor_node, explorer_node, reviewer_node, supervisor_node,
+    coder_node, compact_node, executor_node, explorer_node, reviewer_node,
+    supervisor_node,
 )
 from codeweave.agents.executor import executor_tools_node
 from codeweave.state.schemas import ExecuteState
@@ -36,6 +37,7 @@ def build_execute_graph() -> StateGraph:
     builder.add_node("explorer", explorer_node)
     builder.add_node("coder", coder_node)
     builder.add_node("reviewer", reviewer_node)
+    builder.add_node("compact", compact_node)  # Phase 3 实装,当前是占位
     # ReAct 双节点
     builder.add_node("executor", executor_node)
     builder.add_node("tools", executor_tools_node)
