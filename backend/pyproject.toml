@@ -21,6 +21,7 @@ dependencies = [
     "jinja2>=3.1",
     "tiktoken>=0.8",
     "langchain-openai>=1.3.3",
+    "alembic>=1.18.5",
 ]
 
 [project.optional-dependencies]
@@ -43,3 +44,29 @@ packages = ["src/codeweave"]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 pythonpath = ["src"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+# Alembic 不发布类型 stub,API 表面积比较小,忽略缺失导入比维护类型更稳。
+[[tool.mypy.overrides]]
+module = "alembic.*"
+ignore_missing_imports = true
+
+# SQLAlchemy 的 dialects.postgresql 子模块也没有完整类型 stub;Alembic 的
+# migration 里会用到 JSONB / UUID 等,通过覆盖配合 ignore_missing_imports 即可。
+[[tool.mypy.overrides]]
+module = "sqlalchemy.dialects.postgresql"
+ignore_missing_imports = true
+
+# Alembic migration 文件是运行时生成的胶水代码,函数体内大量调用 SQLAlchemy
+# dialect 内未标注的工厂(JSONB / UUID 等),逐个 cast 不划算。
+[[tool.mypy.overrides]]
+module = "codeweave.db.migrations.versions.*"
+disallow_untyped_calls = false
+
+# 既有基线错误:config/settings.py:72 — get_settings() 调 Settings() 时未传
+# 必填的 openai_api_key,Task 17 处理。这里放宽让 strict 跑通。
+[[tool.mypy.overrides]]
+module = "codeweave.config.settings"
+disallow_untyped_calls = false
