@@ -153,6 +153,56 @@ def edit_file(
     return f"已在 {path} 中完成替换"
 
 
-def grep_files(*args: Any, **kwargs: Any) -> None:  # pragma: no cover
-    """grep_files 占位 — Task 5 实装时删除此函数。"""
-    raise NotImplementedError("grep_files 尚未实现,见 Task 5")
+@register(name="grep_files", plan_mode_safe=True, requires_permission=False, category="file")
+def grep_files(
+    pattern: Annotated[str, "正则表达式模式(ripgrep 语法)"],
+    path: Annotated[str, "搜索根路径(相对于工作目录)"] = ".",
+    glob: Annotated[str, "文件 glob 过滤,如 '*.py'"] = "**/*",
+    max_results: Annotated[int, "最多返回的结果数"] = 50,
+) -> str:
+    """用 ripgrep 在文件中搜索匹配。
+
+    Args:
+        pattern: 正则模式。
+        path: 搜索根(默认 "." 即工作目录)。
+        glob: 文件 glob 过滤。
+        max_results: 结果上限,超过则截断并标注。
+
+    Returns:
+        ripgrep 输出(形如 ``path:line:content``),无匹配返回提示。
+
+    Raises:
+        ToolException: ripgrep 不可用、超时或路径越界。
+    """
+    import shutil
+    import subprocess
+
+    rg = shutil.which("rg")
+    if not rg:
+        raise ToolException("ripgrep (rg) 未安装,无法执行 grep_files")
+
+    root = _check_path(path)
+    if not root.exists():
+        raise ToolException(f"搜索路径不存在: {path}")
+
+    try:
+        proc = subprocess.run(
+            [rg, "--line-number", "--no-heading", "--color=never",
+             "--glob", glob, "--max-columns", "200",
+             pattern, str(root)],
+            capture_output=True, text=True, timeout=10, check=False,
+        )
+    except subprocess.TimeoutExpired as e:
+        raise ToolException(f"grep_files 超时(>10s),请缩小 glob") from e
+
+    if proc.returncode not in (0, 1):  # 0=有匹配,1=无匹配
+        raise ToolException(f"ripgrep 失败: {proc.stderr.strip()}")
+
+    lines = proc.stdout.splitlines()
+    if not lines:
+        return "无匹配"
+
+    if len(lines) > max_results:
+        truncated = lines[:max_results]
+        return "\n".join(truncated) + f"\n[truncated, {len(lines) - max_results} more]"
+    return "\n".join(lines)

@@ -120,3 +120,40 @@ def test_edit_file_path_traversal_blocked(workdir: Path):
     outside = workdir.parent / "evil.py"
     with pytest.raises(ToolException, match="(workdir|escapes|外)"):
         edit_file(path=str(outside), old_text="x", new_text="y")
+
+
+def test_grep_files_finds_matches(workdir: Path):
+    """grep_files 在指定 glob 下查找匹配。"""
+    (workdir / "a.py").write_text("def foo():\n    pass\n", encoding="utf-8")
+    (workdir / "b.py").write_text("def bar():\n    pass\n", encoding="utf-8")
+    result = grep_files(pattern="def foo", path=str(workdir), glob="*.py")
+    assert "a.py" in result
+    assert "b.py" not in result
+
+
+def test_grep_files_respects_max_results(workdir: Path):
+    """max_results 截断结果。"""
+    for i in range(5):
+        (workdir / f"f{i}.py").write_text("x = 1\n", encoding="utf-8")
+    result = grep_files(
+        pattern="x = 1",
+        path=str(workdir),
+        glob="*.py",
+        max_results=2,
+    )
+    # 截断时应该带标记
+    assert "truncated" in result.lower() or "截断" in result or len(result.splitlines()) <= 2
+
+
+def test_grep_files_no_match_returns_message(workdir: Path):
+    """无匹配时返回友好提示。"""
+    (workdir / "a.py").write_text("x = 1\n", encoding="utf-8")
+    result = grep_files(pattern="def nothing", path=str(workdir))
+    assert "无匹配" in result or "no match" in result.lower() or result == ""
+
+
+def test_grep_files_path_traversal_blocked(workdir: Path):
+    """越界路径拒绝搜索。"""
+    outside = workdir.parent
+    with pytest.raises(ToolException, match="(workdir|escapes|外)"):
+        grep_files(pattern="secret", path=str(outside))
