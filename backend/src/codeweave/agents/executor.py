@@ -1,7 +1,7 @@
-"""Executor Agent —— 执行工具调用(读/写/编辑/grep/bash/todo)。
+"""Executor Agent —— 标准 ReAct 双节点(executor ⇄ tools)。
 
-实际实现:绑定 6 个 execute 模式工具到 LLM,ToolNode 调度,
-todo_write 的返回值通过 ``merge_todos`` reducer 合并到 state.todos。
+Reasoning(executor_node) + Acting(tools_node) 分离,符合 LangGraph 推荐的
+ToolNode 模式:executor 调 LLM,tools 跑 ToolNode,循环直至 LLM 不再调工具。
 """
 from __future__ import annotations
 
@@ -9,7 +9,6 @@ from functools import lru_cache
 from typing import Any, Literal, cast
 
 from langchain_core.messages import AIMessage, BaseMessage
-from langchain_core.runnables import Runnable
 from langgraph.prebuilt import ToolNode
 from langgraph.types import Command
 
@@ -31,24 +30,20 @@ def _get_executor_tool_node() -> ToolNode:
     return ToolNode(get_tools_for_mode("execute"))
 
 
-def executor_node(state: RootState) -> Command[Literal["executor", "__end__"]]:
-    """执行 LLM 调用 + tool 调度。
+def executor_node(state: RootState) -> Command[Literal["tools", "__end__"]]:
+    """ReAct 的 Reasoning 步骤:调 LLM,根据 tool_calls 决定路由。
 
-    流程:
-    1. 调 LLM(已 bind 全部 execute 模式工具)
-    2. 如果返回 tool_calls → 调 ToolNode,然后回到本节点
-    3. 解析 todo_write 的返回,合并到 state.todos
-    4. 路由:无 tool_calls → __end__;否则循环到 executor_node
+    路由:
+        - LLM 返回 tool_calls → ``"tools"`` 节点(执行工具)
+        - LLM 不调工具(纯文本回答)→ ``"__end__"`` 结束本轮
 
     Args:
         state: 当前 graph state,至少包含 ``messages``。
 
     Returns:
-        ``Command`` 对象,包含 messages 与可选的 todos 更新,以及 goto 目标。
+        ``Command`` 对象,追加 AIMessage 到 messages,``goto`` 指明下一步。
     """
     model = _get_executor_model()
-    tool_node = _get_executor_tool_node()
-
     messages: list[BaseMessage] = list(state.get("messages") or [])
     response: AIMessage = model.invoke(messages)
     messages.append(response)
@@ -56,23 +51,45 @@ def executor_node(state: RootState) -> Command[Literal["executor", "__end__"]]:
     if not response.tool_calls:
         return Command(update={"messages": messages}, goto="__end__")
 
-    # 用 ToolNode 执行所有 tool_call
-    tool_result = tool_node.invoke({"messages": [response]})
+    return Command(update={"messages": messages}, goto="tools")
+
+
+def executor_tools_node(state: RootState) -> Command[Literal["executor"]]:
+    """ReAct 的 Acting + Observing 步骤:执行 tool_call,合并 todo,回 executor。
+
+    流程:
+        1. 取最后一条 AIMessage(带 tool_calls)
+        2. 用 ToolNode 执行所有 tool_call,得到 ToolMessage 列表
+        3. 若 todo_write 被调用,合并其返回值到 state.todos
+        4. 路由回 ``"executor"`` 让 LLM 继续 Reasoning
+
+    Args:
+        state: 当前 graph state,最后一条消息应是带 tool_calls 的 AIMessage。
+
+    Returns:
+        ``Command`` 对象,追加 ToolMessages 到 messages,可含 todos 更新,``goto="executor"``。
+    """
+    tool_node = _get_executor_tool_node()
+
+    messages: list[BaseMessage] = list(state.get("messages") or [])
+    last_ai = messages[-1]  # AIMessage with tool_calls
+
+    tool_result = tool_node.invoke({"messages": [last_ai]})
     new_messages: list[BaseMessage] = tool_result["messages"]
     messages.extend(new_messages)
 
-    # 检查 todo_write 的返回,合并到 state.todos
+    # 合并 todo_write 返回到 state.todos
     todos_update: list[dict[str, Any]] = []
     for msg in new_messages:
-        # ToolMessage.content 是 str 或 list;todo_write 返回 list
         if hasattr(msg, "name") and getattr(msg, "name", "") == "todo_write":
             content = msg.content
             if isinstance(content, list):
                 todos_update = cast(list[dict[str, Any]], content)
+
+    update: dict[str, Any] = {"messages": messages}
     if todos_update:
         existing = list(state.get("todos") or [])
         existing_dicts = cast(list[dict[str, Any]], existing)
-        merged = merge_todos(existing_dicts, todos_update)
-        return Command(update={"messages": messages, "todos": merged}, goto="executor")
+        update["todos"] = merge_todos(existing_dicts, todos_update)
 
-    return Command(update={"messages": messages}, goto="executor")
+    return Command(update=update, goto="executor")

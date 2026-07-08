@@ -2,13 +2,14 @@
 
 该子图负责在 ``START -> supervisor`` 之后,根据 ``supervisor_node`` 的
 ``Command.goto`` 路由到具体的 explorer/coder/reviewer/executor。
+Executor 与 tools 节点形成标准 ReAct 循环(Reasoning ⇄ Acting)。
 """
 from langgraph.graph import END, START, StateGraph
 
 from codeweave.agents import (
     coder_node, executor_node, explorer_node, reviewer_node, supervisor_node,
 )
-from codeweave.agents.executor import _get_executor_tool_node
+from codeweave.agents.executor import executor_tools_node
 from codeweave.state.schemas import ExecuteState
 
 
@@ -18,6 +19,10 @@ def build_execute_graph() -> StateGraph:
     节点与边:
         - ``START -> supervisor``: 每次进入子图都先经过 Supervisor 决策。
         - ``supervisor -> *``: 由 ``supervisor_node`` 返回的 ``Command.goto`` 处理。
+        - ``executor ⇄ tools``: 标准 ReAct 双节点。
+          executor 调 LLM,若返回 tool_calls 则 ``Command(goto="tools")``;
+          tools 跑 ToolNode,执行完 ``Command(goto="executor")`` 继续 Reasoning。
+          直至 LLM 不再调工具 → ``Command(goto="__end__")`` 结束。
         - ``explorer -> supervisor`` 与 ``executor -> supervisor``: 兜底回退边,
           用于直接返回 dict 的节点回到 Supervisor 重新决策。
 
@@ -31,12 +36,16 @@ def build_execute_graph() -> StateGraph:
     builder.add_node("explorer", explorer_node)
     builder.add_node("coder", coder_node)
     builder.add_node("reviewer", reviewer_node)
+    # ReAct 双节点
     builder.add_node("executor", executor_node)
-    # ToolNode:执行 executor 产生的 tool_call
-    builder.add_node("tools", _get_executor_tool_node())
+    builder.add_node("tools", executor_tools_node)
 
-    # 入口：从父图进入 supervisor
+    # 入口:从父图进入 supervisor
     builder.add_edge(START, "supervisor")
+
+    # ReAct 循环的拓扑边(实际路由由 Command.goto 决定,这里只是声明图结构)
+    builder.add_edge("tools", "executor")
+    builder.add_edge("executor", END)  # 兜底:executor.goto="__end__" 时也能退出
 
     # 来自 supervisor 的条件路由
     # supervisor_node 返回的 Command.goto 已经直接处理路由
