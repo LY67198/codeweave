@@ -49,6 +49,14 @@ class Settings(BaseSettings):
     compact_threshold: int = Field(default=32000)
     compact_enabled: bool = Field(default=True)
     plan_mode_default: bool = Field(default=True)
+    compact_keep_last: int = Field(default=6)
+    compact_summary_max_tokens: int = Field(default=600)
+
+    # === Celery ===
+    celery_broker_url: str = Field(default="redis://localhost:6379/1")
+    celery_result_backend: str = Field(default="redis://localhost:6379/2")
+    celery_task_default_queue: str = Field(default="codeweave")
+    celery_beat_aggregate_interval_seconds: int = Field(default=60)
 
     # === 限制 ===
     max_react_iterations: int = Field(default=8)

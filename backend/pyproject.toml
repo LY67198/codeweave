@@ -70,3 +70,15 @@ disallow_untyped_calls = false
 [[tool.mypy.overrides]]
 module = "codeweave.config.settings"
 disallow_untyped_calls = false
+
+# Celery 5.x 不发 py.typed,@app.task 装饰器也无类型,索性把 Celery 模块
+# 全标记为缺类型,与 alembic 同等待遇。
+[[tool.mypy.overrides]]
+module = "celery.*"
+ignore_missing_imports = true
+
+# LangGraph 的 PostgresSaver 也未在 .pyi 中标注 get_state / setup,这里
+# 关闭缺失导入检查,业务代码需要再单独 cast 或 type: ignore。
+[[tool.mypy.overrides]]
+module = "langgraph.checkpoint.postgres"
+ignore_missing_imports = true

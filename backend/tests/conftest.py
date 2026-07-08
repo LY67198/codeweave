@@ -8,6 +8,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+import pytest
+
 
 # 开发环境中 rg.exe 的常见位置(Claude Code 缓存)
 _RG_SEARCH_PATHS: list[Path] = [
@@ -43,3 +45,37 @@ def pytest_configure(config):  # noqa: ARG001
         "DATABASE_URL",
         "postgresql+psycopg://codeweave:codeweave_dev@localhost:5432/codeweave",
     )
+
+
+@pytest.fixture
+def fake_checkpointer(monkeypatch):
+    """把 ``codeweave.tasks.compact`` 内的 checkpointer 替换为 MagicMock。
+
+    返回 mock,默认 ``get_state(...).values = {"messages": []}``,测试可
+    直接修改 ``mock.get_state.return_value.values`` 注入自定义 messages。
+
+    Returns:
+        已 patch 进 ``codeweave.tasks.compact._get_checkpointer`` 的 MagicMock。
+    """
+    from unittest.mock import MagicMock
+
+    ck = MagicMock()
+    ck.get_state.return_value.values = {"messages": []}
+    monkeypatch.setattr("codeweave.tasks.compact._get_checkpointer", lambda: ck)
+    return ck
+
+
+@pytest.fixture
+def celery_eager():
+    """让 Celery 在当前进程同步执行,免去真实 broker。
+
+    进入时打开 ``task_always_eager``,退出时还原,避免污染其他测试。
+    """
+    from codeweave.tasks.celery_app import celery_app
+
+    prev = celery_app.conf.task_always_eager
+    celery_app.conf.task_always_eager = True
+    try:
+        yield celery_app
+    finally:
+        celery_app.conf.task_always_eager = prev
