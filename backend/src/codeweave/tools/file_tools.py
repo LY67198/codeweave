@@ -136,6 +136,9 @@ def edit_file(
     p = _check_path(path)
     if not p.exists():
         raise ToolException(f"文件不存在: {path}")
+    size = p.stat().st_size
+    if size > MAX_FILE_SIZE:
+        raise ToolException(f"文件过大: {size} bytes (上限 {MAX_FILE_SIZE})")
     text = p.read_text(encoding="utf-8", errors="replace")
     occurrences = text.count(old_text)
     if occurrences == 0:
