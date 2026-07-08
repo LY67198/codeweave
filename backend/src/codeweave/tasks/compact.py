@@ -45,6 +45,17 @@ def _get_checkpointer() -> "PostgresSaver":
     return cast("PostgresSaver", get_checkpointer())  # type: ignore[no-untyped-call]
 
 
+def _mark_row_failed(thread_id: str, reason: str) -> None:
+    """把 ``compact_results`` 里 thread 的最新一行(如有)标 ``status='failed'`` + error。"""
+    with SessionLocal() as session:
+        row = _load_pending_compact(session, thread_id)
+        if row is None:
+            return
+        row.status = "failed"
+        row.error = reason
+        session.commit()
+
+
 def _load_pending_compact(session: Session, thread_id: str) -> CompactResult | None:
     """查 ``compact_results`` 里 thread_id + applied=False 的最新一行。
 
@@ -98,6 +109,7 @@ def compact_thread(self: Any, thread_id: str) -> str:
                 {"reason": "no_checkpoint_for_thread", "messages_total": 0},
                 thread_id=thread_id,
             )
+            _mark_row_failed(thread_id, "no_checkpoint_for_thread")
             return ""
         messages = chkpnt_tuple.checkpoint.get("channel_values", {}).get("messages", [])
     except Exception as exc:
@@ -117,6 +129,7 @@ def compact_thread(self: Any, thread_id: str) -> str:
     to_compact = messages[keep_first:keep_last]
     if not to_compact:
         # 没什么可摘要
+        _mark_row_failed(thread_id, "nothing_to_compact")
         _audit.emit(
             "compact_failed",
             {"reason": "nothing_to_compact"},

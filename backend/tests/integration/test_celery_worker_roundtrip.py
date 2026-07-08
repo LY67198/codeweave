@@ -140,17 +140,21 @@ def worker_proc():
         "--loglevel=info",
         "-c",
         "1",
+        "-n", "test_worker@%h",  # 避免与全局 celery@DESKTOP nodename 冲突
     ]
 
+    worker_log_path = Path(r"D:\Mini_Code\celery_test_worker.log")
+    worker_log_fh = open(worker_log_path, "w")
     proc = subprocess.Popen(
         cmd,
         env=env,
         cwd=str(backend_cwd),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stdout=worker_log_fh,
+        stderr=subprocess.STDOUT,
     )
-    # 等 worker 起来,3s 经验值
-    time.sleep(3)
+    # 等 worker 起来。Windows 上 uv run + Python import + celery boot + Redis
+    # 连接 + spawn pool worker 全套起来比较慢,经验值 8s
+    time.sleep(8)
     try:
         yield proc
     finally:
@@ -161,27 +165,41 @@ def worker_proc():
             except subprocess.TimeoutExpired:
                 proc.kill()
                 proc.wait()
+        worker_log_fh.close()
 
 
 @_SKIPIF
 def test_task_visible_across_process_via_polling():
     """通过同进程 .delay dispatch,期待 worker 子进程在 10s 内把 CompactResult
-    推进到 ``done`` 或 ``failed`` — 证明跨进程可见。
+    推进到 ``failed``(因为此测试不写真正的 LangGraph checkpoint,worker 会因
+    no_checkpoint_for_thread 标 failed) — 证明跨进程可见。
+
+    注:``done`` 路径需要真实的 LangGraph thread + checkpoint,留待 Phase 4
+    端到端串通后再加正路径断言。
     """
+    # 清掉 worker 启动之前累计的 stale 任务(之前测试可能留下了)。
+    try:
+        import redis
+        broker = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/1")
+        rc = redis.Redis.from_url(broker)
+        rc.flushdb()
+    except Exception as exc:
+        print(f"redis flush skipped: {exc}")
+
     from codeweave.db.models import CompactResult
     from codeweave.tasks.compact import compact_thread
 
     tid = "worker-roundtrip-1"
     with SessionLocal() as session:
-        row = CompactResult(thread_id=tid, status="pending", applied=False)
-        session.add(row)
+        session.query(CompactResult).filter_by(thread_id=tid).delete()
+        session.add(CompactResult(thread_id=tid, status="pending", applied=False))
         session.commit()
 
     # 异步发起任务(短 .delay 不阻塞,worker 在另一进程)
     compact_thread.delay(tid)
 
-    # poll DB 最多 10s
-    deadline = time.time() + 10
+    # poll DB 最多 15s,期待 status 离开 pending
+    deadline = time.time() + 15
     final_status = None
     while time.time() < deadline:
         with SessionLocal() as session:
@@ -196,6 +214,15 @@ def test_task_visible_across_process_via_polling():
                 break
         time.sleep(0.5)
 
+    if final_status is None:
+        # 调试信息:打 worker log 最后 30 行协助排查 broker / 连接 / 任务接收问题
+        try:
+            log_tail = Path(r"D:\Mini_Code\celery_test_worker.log").read_text()
+            print("\n--- celery_test_worker.log (tail 30 lines) ---")
+            print("".join(log_tail.splitlines()[-30:]))
+        except Exception:
+            pass
+
     assert final_status in {"done", "failed"}, (
-        "10s 内 worker 没把任务完成,broker 链路可能有问题"
+        f"15s 内 worker 没把任务完成,broker 链路可能有问题 (final_status={final_status!r})"
     )
