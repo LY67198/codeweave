@@ -1,15 +1,20 @@
 """文件工具:read_file / write_file / edit_file / grep_files。
 
 所有工具入口都做 WORK_DIR 路径校验,防止 Agent 越权访问。
+
+Phase 3 (Task 10) 起,每个工具调用结束后会通过模块级 ``_audit`` 全局变量
+emit ``tool_call`` audit 事件(若 ``_audit`` 为 ``None`` 则跳过,工具仍正常工作)。
 """
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 from typing import Annotated, Any
 
 from langchain_core.tools import ToolException
 
+from codeweave.persistence.audit import AuditLogger
 from codeweave.tools.registry import register
 
 
@@ -20,6 +25,57 @@ MAX_FILE_SIZE = 1 * 1024 * 1024  # 1 MB
 
 # 写文件最大字节数
 MAX_WRITE_SIZE = 512 * 1024  # 512 KB
+
+
+# ---------------------------------------------------------------------------
+# Audit 集成(Phase 3 Task 10)
+# ---------------------------------------------------------------------------
+
+# 模块级 AuditLogger 句柄。默认 None,表示无 audit;测试 / graph 启动后可注入。
+_audit: AuditLogger | None = None
+
+
+def set_audit_logger(logger: AuditLogger | None) -> None:
+    """注入 / 清除模块级 AuditLogger。
+
+    供 graph 启动阶段或测试注入使用。设为 ``None`` 表示关闭 audit。
+
+    Args:
+        logger: AuditLogger 实例,或 None。
+    """
+    global _audit
+    _audit = logger
+
+
+def _emit_tool_call(
+    tool_name: str,
+    args: dict[str, Any],
+    result: Any,
+    duration_ms: int,
+    thread_id: str,
+) -> None:
+    """emit ``tool_call`` audit 事件。失败吞掉异常,业务继续。
+
+    Args:
+        tool_name: 工具名(用于 payload.tool)。
+        args: 工具调用参数(用于 payload.args)。
+        result: 工具返回值(截断到 200 字符写入 payload.result_summary)。
+        duration_ms: 调用耗时(毫秒)。
+        thread_id: 关联的 LangGraph thread_id,缺省 ``"<no-thread>"``。
+    """
+    if _audit is None:
+        return
+    try:
+        result_summary = repr(result)[:200]
+        _audit.emit(
+            "tool_call",
+            {"tool": tool_name, "args": args, "result_summary": result_summary},
+            thread_id=thread_id,
+            duration_ms=duration_ms,
+        )
+    except Exception:  # noqa: BLE001
+        # audit 失败不影响工具返回值(spec §5.3)
+        pass
 
 
 def _check_path(path_str: str) -> Path:
@@ -59,6 +115,7 @@ def read_file(
     path: Annotated[str, "要读取的文件路径(相对于工作目录)"],
     offset: Annotated[int, "起始行号(0-based)"] = 0,
     limit: Annotated[int, "读取行数上限"] = 2000,
+    thread_id: Annotated[str, "LangGraph thread_id(审计用)"] = "<no-thread>",
 ) -> str:
     """读取文件内容,支持 offset/limit 分页。
 
@@ -66,6 +123,7 @@ def read_file(
         path: 文件路径。
         offset: 起始行号,默认 0。
         limit: 读取行数,默认 2000。
+        thread_id: LangGraph thread_id,用于 audit 关联,默认 ``"<no-thread>"``。
 
     Returns:
         文件内容字符串。
@@ -73,6 +131,7 @@ def read_file(
     Raises:
         ToolException: 文件不存在、过大、路径越界。
     """
+    start = time.monotonic()
     p = _check_path(path)
     if not p.exists():
         raise ToolException(f"文件不存在: {path}")
@@ -83,19 +142,29 @@ def read_file(
         raise ToolException(f"文件过大: {size} bytes (上限 {MAX_FILE_SIZE})")
     text = p.read_text(encoding="utf-8", errors="replace")
     lines = text.splitlines(keepends=True)
-    return "".join(lines[offset : offset + limit])
+    result = "".join(lines[offset : offset + limit])
+    _emit_tool_call(
+        "read_file",
+        {"path": path, "offset": offset, "limit": limit},
+        result,
+        int((time.monotonic() - start) * 1000),
+        thread_id,
+    )
+    return result
 
 
 @register(name="write_file", plan_mode_safe=False, requires_permission=False, category="file")
 def write_file(
     path: Annotated[str, "目标文件路径(相对于工作目录,会自动创建中间目录)"],
     content: Annotated[str, "要写入的完整文件内容"],
+    thread_id: Annotated[str, "LangGraph thread_id(审计用)"] = "<no-thread>",
 ) -> str:
     """写入文件(覆盖),自动创建中间目录。
 
     Args:
         path: 目标文件路径。
         content: 完整内容。
+        thread_id: LangGraph thread_id,用于 audit 关联,默认 ``"<no-thread>"``。
 
     Returns:
         写入成功的提示(含字节数)。
@@ -103,6 +172,7 @@ def write_file(
     Raises:
         ToolException: 内容过大或路径越界。
     """
+    start = time.monotonic()
     p = _check_path(path)
     content_bytes = content.encode("utf-8")
     if len(content_bytes) > MAX_WRITE_SIZE:
@@ -111,7 +181,15 @@ def write_file(
         )
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_bytes(content_bytes)
-    return f"已写入 {path} ({len(content_bytes)} bytes)"
+    result = f"已写入 {path} ({len(content_bytes)} bytes)"
+    _emit_tool_call(
+        "write_file",
+        {"path": path, "content": content},
+        result,
+        int((time.monotonic() - start) * 1000),
+        thread_id,
+    )
+    return result
 
 
 @register(name="edit_file", plan_mode_safe=False, requires_permission=False, category="file")
@@ -119,6 +197,7 @@ def edit_file(
     path: Annotated[str, "目标文件路径(相对于工作目录)"],
     old_text: Annotated[str, "要被替换的原文本(必须唯一匹配)"],
     new_text: Annotated[str, "替换后的新文本"],
+    thread_id: Annotated[str, "LangGraph thread_id(审计用)"] = "<no-thread>",
 ) -> str:
     """精确字符串替换编辑文件。
 
@@ -126,6 +205,7 @@ def edit_file(
         path: 目标文件路径。
         old_text: 必须唯一匹配文件中某段子串。
         new_text: 替换内容。
+        thread_id: LangGraph thread_id,用于 audit 关联,默认 ``"<no-thread>"``。
 
     Returns:
         替换成功的提示。
@@ -133,6 +213,7 @@ def edit_file(
     Raises:
         ToolException: 0 处或 >1 处匹配,或路径越界。
     """
+    start = time.monotonic()
     p = _check_path(path)
     if not p.exists():
         raise ToolException(f"文件不存在: {path}")
@@ -150,7 +231,15 @@ def edit_file(
         )
     new_text_full = text.replace(old_text, new_text, 1)
     p.write_text(new_text_full, encoding="utf-8")
-    return f"已在 {path} 中完成替换"
+    result = f"已在 {path} 中完成替换"
+    _emit_tool_call(
+        "edit_file",
+        {"path": path, "old_text": old_text, "new_text": new_text},
+        result,
+        int((time.monotonic() - start) * 1000),
+        thread_id,
+    )
+    return result
 
 
 @register(name="grep_files", plan_mode_safe=True, requires_permission=False, category="file")
@@ -159,6 +248,7 @@ def grep_files(
     path: Annotated[str, "搜索根路径(相对于工作目录)"] = ".",
     glob: Annotated[str, "文件 glob 过滤,如 '*.py'"] = "**/*",
     max_results: Annotated[int, "最多返回的结果数"] = 50,
+    thread_id: Annotated[str, "LangGraph thread_id(审计用)"] = "<no-thread>",
 ) -> str:
     """用 ripgrep 在文件中搜索匹配。
 
@@ -167,6 +257,7 @@ def grep_files(
         path: 搜索根(默认 "." 即工作目录)。
         glob: 文件 glob 过滤。
         max_results: 结果上限,超过则截断并标注。
+        thread_id: LangGraph thread_id,用于 audit 关联,默认 ``"<no-thread>"``。
 
     Returns:
         ripgrep 输出(形如 ``path:line:content``),无匹配返回提示。
@@ -174,6 +265,7 @@ def grep_files(
     Raises:
         ToolException: ripgrep 不可用、超时或路径越界。
     """
+    start = time.monotonic()
     import shutil
     import subprocess
 
@@ -200,9 +292,18 @@ def grep_files(
 
     lines = proc.stdout.splitlines()
     if not lines:
-        return "无匹配"
-
-    if len(lines) > max_results:
+        result = "无匹配"
+    elif len(lines) > max_results:
         truncated = lines[:max_results]
-        return "\n".join(truncated) + f"\n[truncated, {len(lines) - max_results} more]"
-    return "\n".join(lines)
+        result = "\n".join(truncated) + f"\n[truncated, {len(lines) - max_results} more]"
+    else:
+        result = "\n".join(lines)
+
+    _emit_tool_call(
+        "grep_files",
+        {"pattern": pattern, "path": path, "glob": glob, "max_results": max_results},
+        result,
+        int((time.monotonic() - start) * 1000),
+        thread_id,
+    )
+    return result
