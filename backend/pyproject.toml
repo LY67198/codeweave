@@ -44,6 +44,9 @@ packages = ["src/codeweave"]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 pythonpath = ["src"]
+markers = [
+    "llm: 需要真实 LLM API key 的测试,默认 skip,跑时加 -m llm",
+]
 
 [tool.mypy]
 python_version = "3.12"
