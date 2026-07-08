@@ -285,7 +285,7 @@ def grep_files(
             capture_output=True, text=True, timeout=10, check=False,
         )
     except subprocess.TimeoutExpired as e:
-        raise ToolException(f"grep_files 超时(>10s),请缩小 glob") from e
+        raise ToolException("grep_files 超时(>10s),请缩小 glob") from e
 
     if proc.returncode not in (0, 1):  # 0=有匹配,1=无匹配
         raise ToolException(f"ripgrep 失败: {proc.stderr.strip()}")
