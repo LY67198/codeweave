@@ -164,6 +164,23 @@ codeweave/
 
 CodeWeave 灵感来自 [Claude Code](https://docs.claude.com/en/docs/claude-code),但构建在不同的技术栈上(LangGraph + Vue 3 + FastAPI),采用多客户端架构。我们保留 Claude Code 的 UX(Plan Mode / Sub-agents / Skills / MCP),同时基于 LangGraph 的声明式 StateGraph 模型实现。
 
+## 🪟 Windows (PowerShell) 等价命令
+
+`make` 在 Windows 上不一定可用,可直接用 `uv` 等价命令(从项目根 `D:\Mini_Code\` 运行):
+
+```powershell
+# Celery worker
+uv run --project backend celery -A codeweave.tasks worker -Q codeweave -l info
+
+# Celery beat(定时任务调度)
+uv run --project backend celery -A codeweave.tasks beat -l info
+
+# Alembic 数据库迁移
+uv run --project backend alembic upgrade head
+uv run --project backend alembic revision --autogenerate -m "your message"
+uv run --project backend alembic downgrade -1
+```
+
 ## 📄 许可证
 
 [MIT](LICENSE)

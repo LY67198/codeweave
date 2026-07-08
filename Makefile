@@ -1,7 +1,7 @@
 # CodeWeave Makefile
 # 使用正确的 flag 封装 uv 命令，以兼容工作区（Windows 上 uv 0.11.x 的特殊行为）
 
-.PHONY: sync install test test-backend test-integration lint format clean dev-up dev-down
+.PHONY: sync install test test-backend test-integration lint format clean dev-up dev-down worker beat migrate migrate-new migrate-down
 
 sync:
 	uv sync --all-packages
@@ -33,3 +33,19 @@ clean:
 	docker compose down -v
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	rm -rf .venv backend/.venv cli/.venv
+
+# Phase 3: Celery worker / beat / Alembic migrations
+worker:
+	uv run --project backend celery -A codeweave.tasks worker -Q codeweave -l info
+
+beat:
+	uv run --project backend celery -A codeweave.tasks beat -l info
+
+migrate:
+	uv run --project backend alembic upgrade head
+
+migrate-new:
+	uv run --project backend alembic revision --autogenerate -m "$(m)"
+
+migrate-down:
+	uv run --project backend alembic downgrade -1
