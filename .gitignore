@@ -28,8 +28,8 @@ env/
 ENV/
 .uv/
 
-# uv
-uv.lock
+# uv (lock file IS committed for application projects)
+# uv.lock
 
 # IDE
 .idea/
