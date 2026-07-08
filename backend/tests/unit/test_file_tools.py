@@ -57,3 +57,34 @@ def test_read_file_path_traversal_blocked(workdir: Path):
     outside.write_text("secret", encoding="utf-8")
     with pytest.raises(ToolException, match="(workdir|escapes|外)"):
         read_file(path=str(outside))
+
+
+def test_write_file_creates_directories(workdir: Path):
+    """write_file 自动创建中间目录。"""
+    p = workdir / "a" / "b" / "c.txt"
+    result = write_file(path=str(p), content="data")
+    assert "写入" in result or "wrote" in result.lower()
+    assert p.read_text(encoding="utf-8") == "data"
+
+
+def test_write_file_overwrites_existing(workdir: Path):
+    """write_file 覆盖已有内容。"""
+    p = workdir / "out.txt"
+    p.write_text("old", encoding="utf-8")
+    write_file(path=str(p), content="new")
+    assert p.read_text(encoding="utf-8") == "new"
+
+
+def test_write_file_too_large_raises(workdir: Path):
+    """写入内容超过 MAX_WRITE_SIZE 时抛 ToolException。"""
+    p = workdir / "huge.txt"
+    big = "x" * (file_tools.MAX_WRITE_SIZE + 1)
+    with pytest.raises(ToolException, match="(过大|too large)"):
+        write_file(path=str(p), content=big)
+
+
+def test_write_file_path_traversal_blocked(workdir: Path):
+    """越界路径拒绝写入。"""
+    outside = workdir.parent / "evil.txt"
+    with pytest.raises(ToolException, match="(workdir|escapes|外)"):
+        write_file(path=str(outside), content="bad")

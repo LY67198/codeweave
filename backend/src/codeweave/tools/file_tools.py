@@ -86,13 +86,32 @@ def read_file(
     return "".join(lines[offset : offset + limit])
 
 
-# --- 占位 stub:让 test_file_tools.py 可以一次导入全部 4 个工具名 ---
-# 真实实现在 Task 3/4/5 中通过 @register 装饰器登记并替换这些 stub。
-# 当前测试套件仅针对 read_file,这些 stub 不会被调用。
-# --- 以下为占位 stub,Task 3/4/5 添加实装时请删除对应 stub ---
-def write_file(*args: Any, **kwargs: Any) -> None:  # pragma: no cover
-    """write_file 占位 — Task 3 实装时删除此函数。"""
-    raise NotImplementedError("write_file 尚未实现,见 Task 3")
+@register(name="write_file", plan_mode_safe=False, requires_permission=False, category="file")
+def write_file(
+    path: Annotated[str, "目标文件路径(相对于工作目录,会自动创建中间目录)"],
+    content: Annotated[str, "要写入的完整文件内容"],
+) -> str:
+    """写入文件(覆盖),自动创建中间目录。
+
+    Args:
+        path: 目标文件路径。
+        content: 完整内容。
+
+    Returns:
+        写入成功的提示(含字节数)。
+
+    Raises:
+        ToolException: 内容过大或路径越界。
+    """
+    p = _check_path(path)
+    content_bytes = content.encode("utf-8")
+    if len(content_bytes) > MAX_WRITE_SIZE:
+        raise ToolException(
+            f"内容过大: {len(content_bytes)} bytes (上限 {MAX_WRITE_SIZE})"
+        )
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_bytes(content_bytes)
+    return f"已写入 {path} ({len(content_bytes)} bytes)"
 
 
 def edit_file(*args: Any, **kwargs: Any) -> None:  # pragma: no cover
