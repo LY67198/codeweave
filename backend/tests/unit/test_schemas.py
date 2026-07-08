@@ -11,7 +11,7 @@ def test_root_state_has_messages():
 
 
 def test_plan_state_inherits_root():
-    # TypedDict doesn't support issubclass; verify fields instead
+    # TypedDict 不支持 issubclass，改用校验字段
     plan_hints = get_type_hints(PlanState)
     root_hints = get_type_hints(RootState)
     for key in root_hints:
@@ -22,7 +22,7 @@ def test_plan_state_inherits_root():
 
 
 def test_execute_state_inherits_root():
-    # TypedDict doesn't support issubclass; verify fields instead
+    # TypedDict 不支持 issubclass，改用校验字段
     exec_hints = get_type_hints(ExecuteState)
     root_hints = get_type_hints(RootState)
     for key in root_hints:

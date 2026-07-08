@@ -1,5 +1,5 @@
 # CodeWeave Makefile
-# Wraps uv commands with correct flags for workspace (uv 0.11.x quirk on Windows)
+# 使用正确的 flag 封装 uv 命令，以兼容工作区（Windows 上 uv 0.11.x 的特殊行为）
 
 .PHONY: sync install test test-backend test-integration lint format clean dev-up dev-down
 

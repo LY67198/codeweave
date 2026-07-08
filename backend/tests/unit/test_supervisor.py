@@ -4,7 +4,7 @@ from codeweave.agents.supervisor import SupervisorDecision, supervisor_node
 
 
 def test_supervisor_decision_typed():
-    """SupervisorDecision has expected fields."""
+    """SupervisorDecision 包含预期的字段。"""
     d = SupervisorDecision(next="coder", reason="need to write code")
     assert d.next == "coder"
     assert d.reason == "need to write code"
@@ -12,10 +12,10 @@ def test_supervisor_decision_typed():
 
 @patch("codeweave.agents.supervisor.get_chat_model")
 def test_supervisor_node_returns_command(mock_get_model):
-    """Supervisor returns Command with update + goto."""
+    """Supervisor 返回包含 update + goto 的 Command。"""
     from langgraph.types import Command
 
-    # Mock LLM with structured output
+    # 使用结构化输出 Mock LLM
     mock_llm = MagicMock()
     mock_structured = MagicMock()
     mock_structured.invoke.return_value = SupervisorDecision(next="explorer", reason="explore first")

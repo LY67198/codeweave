@@ -27,13 +27,13 @@ Decide the next agent. Be decisive.
 
 
 class SupervisorDecision(BaseModel):
-    """Structured decision from supervisor."""
+    """来自 Supervisor 的结构化决策结果。"""
     next: Literal["supervisor", "explorer", "coder", "reviewer", "executor", "compact", "FINISH"]
     reason: str = Field(default="")
 
 
 def supervisor_node(state: RootState) -> Command:
-    """Decide which agent runs next based on current state."""
+    """根据当前状态决策下一个运行的 Agent。"""
     llm = get_chat_model()
     structured_llm = llm.with_structured_output(SupervisorDecision)
 

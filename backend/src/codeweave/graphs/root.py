@@ -8,13 +8,13 @@ from codeweave.state.schemas import RootState
 
 
 def build_root_graph(checkpointer=None):
-    """Build the top-level StateGraph with Plan + Execute Subgraphs.
+    """构建顶层 StateGraph，包含 Plan 和 Execute 两个 Subgraph。
 
     Args:
-        checkpointer: Optional PostgresSaver instance. If None, uses default.
+        checkpointer: 可选的 PostgresSaver 实例。若为 None，则使用默认实例。
 
     Returns:
-        Compiled graph ready for invoke/stream.
+        已编译的图，可直接用于 invoke/stream。
     """
     settings = get_settings()
 
@@ -23,15 +23,15 @@ def build_root_graph(checkpointer=None):
 
     builder = StateGraph(RootState)
 
-    # Use subgraphs as nodes
+    # 将 Subgraph 用作节点
     builder.add_node("plan", plan_subgraph)
     builder.add_node("execute", execute_subgraph)
 
-    # Simple flow: plan → execute → END
-    # (Real plan-mode interrupt logic added in Phase 3)
+    # 简单流程：plan -> execute -> END
+    #（完整的 plan-mode 中断逻辑将在第三阶段加入）
     builder.add_edge(START, "execute")
     builder.add_edge("execute", END)
 
-    # Compile with checkpointer
+    # 使用 checkpointer 编译
     cp = checkpointer or get_checkpointer()
     return builder.compile(checkpointer=cp)

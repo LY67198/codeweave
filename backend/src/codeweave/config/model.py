@@ -8,9 +8,9 @@ def get_chat_model(
     temperature: float | None = None,
     settings: Settings | None = None,
 ):
-    """Get a configured chat model instance using LangChain's init_chat_model.
+    """使用 LangChain 的 init_chat_model 获取配置好的聊天模型实例。
 
-    Supports any OpenAI-compatible provider (DeepSeek, Qwen, GLM, OpenAI).
+    支持任意兼容 OpenAI 的服务提供商（DeepSeek、Qwen、GLM、OpenAI）。
     """
     s = settings or get_settings()
     return init_chat_model(

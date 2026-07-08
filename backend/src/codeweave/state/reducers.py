@@ -2,7 +2,7 @@ from typing import Any
 
 
 def merge_todos(existing: list[dict], update: list[dict]) -> list[dict]:
-    """Merge todos by id: overwrite existing, append new."""
+    """按 id 合并 todos：覆盖已存在的项，追加新的项。"""
     by_id: dict[str, dict] = {}
     for todo in (existing or []):
         todo_id = todo.get("id")
@@ -19,11 +19,11 @@ def trim_agent_history(
     existing: list[dict] | None,
     update: list[dict] | None,
 ) -> list[dict]:
-    """Keep only last 10 entries in agent_history."""
+    """仅保留 agent_history 中最后 10 条记录。"""
     combined = (existing or []) + (update or [])
     return combined[-10:]
 
 
 def replace_if_set(existing: Any, update: Any) -> Any:
-    """Use update if not None, otherwise keep existing."""
+    """若 update 非 None 则使用 update，否则保留 existing。"""
     return update if update is not None else existing

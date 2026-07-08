@@ -11,30 +11,30 @@ class Todo(TypedDict):
 
 
 class RootState(TypedDict, total=False):
-    """Shared state for both Plan and Execute Subgraphs."""
-    # === Messages (LangGraph built-in reducer) ===
+    """Plan 和 Execute Subgraph 共享的状态。"""
+    # === 消息（LangGraph 内置 Reducer）===
     messages: Annotated[list[BaseMessage], add_messages]
 
-    # === Task meta ===
+    # === 任务元信息 ===
     thread_id: str
     user_request: str
     session_started_at: str
 
-    # === Plan ===
+    # === 计划 ===
     plan: list[dict] | None
     plan_decision: Literal["approve", "edit", "reject"] | None
     plan_feedback: str | None
 
-    # === Todo ===
+    # === 待办 ===
     todos: list[Todo]
 
-    # === Context management ===
+    # === 上下文管理 ===
     token_count: int
     compact_threshold: int
     compact_count: int
     last_compact_summary: str | None
 
-    # === Routing ===
+    # === 路由 ===
     next_agent: Literal[
         "supervisor", "explorer", "coder",
         "reviewer", "executor", "compact", "__end__"
@@ -42,22 +42,22 @@ class RootState(TypedDict, total=False):
     plan_mode: bool
     recursion_remaining: int
 
-    # === Sub-agent parallel (Send) ===
+    # === 子 Agent 并行（Send）===
     parallel_tasks: list[dict] | None
 
-    # === Audit ===
+    # === 审计 ===
     agent_history: list[dict]
 
 
 class PlanState(RootState):
-    """Plan Subgraph specific state."""
+    """Plan Subgraph 特有的状态。"""
     exploration_findings: list[str]
     proposed_steps: list[dict]
     approval_pending: bool
 
 
 class ExecuteState(RootState):
-    """Execute Subgraph specific state."""
+    """Execute Subgraph 特有的状态。"""
     code_diffs: list[dict]
     review_iterations: int
     last_review_feedback: list[str]

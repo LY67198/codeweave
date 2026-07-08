@@ -7,22 +7,22 @@ from codeweave.state.schemas import ExecuteState
 
 
 def build_execute_graph() -> StateGraph:
-    """Build the Execute Subgraph (read+write phase)."""
+    """构建 Execute Subgraph（读+写阶段）。"""
     builder = StateGraph(ExecuteState)
 
-    # Add nodes
+    # 添加节点
     builder.add_node("supervisor", supervisor_node)
     builder.add_node("explorer", explorer_node)
     builder.add_node("coder", coder_node)
     builder.add_node("reviewer", reviewer_node)
     builder.add_node("executor", executor_node)
 
-    # Entry: from parent graph into supervisor
+    # 入口：从父图进入 supervisor
     builder.add_edge(START, "supervisor")
 
-    # Conditional routing from supervisor
-    # The Command.goto returned by supervisor_node handles routing directly
-    # But we also need fallback edges for nodes that return plain dicts
+    # 来自 supervisor 的条件路由
+    # supervisor_node 返回的 Command.goto 已经直接处理路由
+    # 但对于直接返回 dict 的节点也需要回退边
     builder.add_edge("explorer", "supervisor")
     builder.add_edge("executor", "supervisor")
 

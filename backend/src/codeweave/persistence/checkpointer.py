@@ -8,7 +8,7 @@ _saver = None
 
 
 def _get_pool() -> ConnectionPool:
-    """Lazy-init a single shared ConnectionPool."""
+    """延迟初始化一个共享的 ConnectionPool。"""
     global _pool
     if _pool is None:
         settings = get_settings()
@@ -22,10 +22,10 @@ def _get_pool() -> ConnectionPool:
 
 
 def get_checkpointer():
-    """Get PostgresSaver instance from LangGraph (native, no wrappers).
+    """获取 LangGraph 原生的 PostgresSaver 实例（无额外封装）。
 
-    Uses a shared ConnectionPool so the saver can be passed to graph.compile()
-    and live across multiple invocations. Tables are auto-created on first .setup() call.
+    使用共享的 ConnectionPool，以便将 saver 传递给 graph.compile()，
+    并在多次调用之间复用。表会在首次调用 .setup() 时自动创建。
     """
     global _saver
     if _saver is None:
@@ -36,5 +36,5 @@ def get_checkpointer():
 
 
 def setup_checkpointer() -> None:
-    """Create checkpoint tables (idempotent). Call once at app startup."""
+    """创建 checkpoint 表（幂等操作）。请在应用启动时调用一次。"""
     get_checkpointer().setup()
