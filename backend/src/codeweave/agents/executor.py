@@ -86,7 +86,8 @@ def executor_tools_node(state: RootState) -> Command[Literal["executor"]]:
             if isinstance(content, list):
                 todos_update = cast(list[dict[str, Any]], content)
 
-    update: dict[str, Any] = {"messages": messages}
+    # 实验:不返回 messages update,只返回 todos(若有)
+    update: dict[str, Any] = {"messages": new_messages}
     if todos_update:
         existing = list(state.get("todos") or [])
         existing_dicts = cast(list[dict[str, Any]], existing)
