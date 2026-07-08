@@ -57,6 +57,7 @@ class Settings(BaseSettings):
     celery_result_backend: str = Field(default="redis://localhost:6379/2")
     celery_task_default_queue: str = Field(default="codeweave")
     celery_beat_aggregate_interval_seconds: int = Field(default=60)
+    compact_cleanup_retention_days: int = Field(default=7)
 
     # === 限制 ===
     max_react_iterations: int = Field(default=8)

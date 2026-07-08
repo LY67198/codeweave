@@ -15,6 +15,7 @@ celery_app = make_celery(
     include=[
         "codeweave.tasks.compact",
         "codeweave.tasks.token_aggregate",
+        "codeweave.tasks.cleanup",
     ],
 )
 celery_app.conf.update(
@@ -30,5 +31,9 @@ celery_app.conf.beat_schedule = {
     "aggregate-token-usage": {
         "task": "codeweave.aggregate_token_usage",
         "schedule": float(_settings.celery_beat_aggregate_interval_seconds),
+    },
+    "cleanup-old-compact-results": {
+        "task": "codeweave.cleanup_old_compact_results",
+        "schedule": 7 * 24 * 60 * 60.0,  # 7 天一次
     },
 }
