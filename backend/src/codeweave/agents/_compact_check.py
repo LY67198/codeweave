@@ -103,6 +103,7 @@ def decide_compact_action(
                 + list(old[done.keep_last:])
             )
             done.applied = True
+            session.commit()
             return CompactAction(
                 kind="executor",
                 new_messages=new,
@@ -135,7 +136,7 @@ def decide_compact_action(
                 applied=False,
             )
             session.add(row)
-            session.flush()
+            session.commit()  # INSERT 必须 commit,否则 race 检测看不到
         except IntegrityError:
             # 唯一索引撞了 → 已有 pending 行在并发中被别人插入
             session.rollback()

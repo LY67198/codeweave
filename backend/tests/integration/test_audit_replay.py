@@ -20,7 +20,7 @@ from codeweave.persistence.audit import AuditLogger
 
 def _postgres_reachable(url: str, timeout: float = 2.0) -> bool:
     """短超时探测 Postgres 是否可达,避免测试集卡死。"""
-    from sqlalchemy import create_engine
+    from sqlalchemy import create_engine, text
 
     try:
         engine = create_engine(
@@ -28,7 +28,7 @@ def _postgres_reachable(url: str, timeout: float = 2.0) -> bool:
             connect_args={"connect_timeout": int(timeout)},
         )
         with engine.connect() as conn:
-            conn.execute("SELECT 1")
+            conn.execute(text("SELECT 1"))
         return True
     except (OperationalError, DBAPIError, OSError, ValueError):
         return False

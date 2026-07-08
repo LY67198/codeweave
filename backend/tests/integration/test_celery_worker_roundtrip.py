@@ -26,7 +26,7 @@ from codeweave.db.base import SessionLocal
 # 数据库连通性探测(沿用 test_compact_real_llm.py 的模式)
 def _postgres_reachable(url: str, timeout: float = 2.0) -> bool:
     """短超时探测 Postgres 是否可达,避免测试集卡死。"""
-    from sqlalchemy import create_engine
+    from sqlalchemy import create_engine, text
     from sqlalchemy.exc import DBAPIError, OperationalError
 
     try:
@@ -35,7 +35,7 @@ def _postgres_reachable(url: str, timeout: float = 2.0) -> bool:
             connect_args={"connect_timeout": int(timeout)},
         )
         with engine.connect() as conn:
-            conn.execute("SELECT 1")  # type: ignore[arg-type]
+            conn.execute(text("SELECT 1"))
         return True
     except (OperationalError, DBAPIError, OSError, ValueError):
         return False
