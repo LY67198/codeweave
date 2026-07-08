@@ -1,7 +1,7 @@
 """compact_thread Celery task(spec §4.3)。
 
 读 PostgresSaver checkpoint → 调 LLM 摘要 → 写 compact_results。
-失败重试 3 次,指数退避。
+失败重试 3 次(默认 30s 间隔)。
 """
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from codeweave.db.base import SessionLocal
 from codeweave.db.models import CompactResult
 from codeweave.persistence.audit import AuditLogger
 from codeweave.services.compact_logic import (
+    _ENC,
     choose_compact_range,
     estimate_messages_tokens,
     render_compact_prompt,
@@ -83,12 +84,6 @@ def compact_thread(self: Any, thread_id: str) -> str:
         写入的 ``compact_results.id``(UUID 字符串);若 nothing-to-compact
         返回空串。
     """
-    _audit.emit(
-        "compact_started",
-        {"messages_total": "?", "tokens_before": 0},
-        thread_id=thread_id,
-    )
-
     # 1. 读 messages
     try:
         checkpointer = _get_checkpointer()
@@ -102,7 +97,14 @@ def compact_thread(self: Any, thread_id: str) -> str:
 
     tokens_before = estimate_messages_tokens(messages)
     settings = get_settings()
-    keep_first, keep_last = choose_compact_range(messages, settings.compact_keep_last)
+    _audit.emit(
+        "compact_started",
+        {"messages_total": len(messages), "tokens_before": tokens_before},
+        thread_id=thread_id,
+    )
+    keep_first, keep_last = choose_compact_range(
+        messages, settings.compact_keep_last
+    )
     to_compact = messages[keep_first:keep_last]
     if not to_compact:
         # 没什么可摘要
@@ -130,11 +132,9 @@ def compact_thread(self: Any, thread_id: str) -> str:
         )
         raise self.retry(exc=exc) from exc
 
-    tokens_after = (
-        estimate_messages_tokens(messages[:keep_first])
-        + summary_tokens
-        + estimate_messages_tokens(messages[keep_last:])
-    )
+    # tokens_after = tokens_before - 被压缩掉的 token + 摘要 token
+    tokens_of_to_compact = estimate_messages_tokens(to_compact)
+    tokens_after = tokens_before - tokens_of_to_compact + summary_tokens
 
     # 3. 写 compact_results
     row_id = ""
@@ -175,7 +175,7 @@ def compact_thread(self: Any, thread_id: str) -> str:
     _tracker.track(
         thread_id=thread_id,
         model=settings.model_name,
-        prompt_tokens=len(prompt) // 4,  # 粗估
+        prompt_tokens=len(_ENC.encode(prompt)),
         completion_tokens=summary_tokens,
     )
     return row_id

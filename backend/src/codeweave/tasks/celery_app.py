@@ -24,9 +24,6 @@ celery_app.conf.update(
     task_time_limit=300,
     task_soft_time_limit=240,
     broker_connection_retry_on_startup=True,
-    timezone="UTC",
-    enable_utc=True,
-    result_extended=False,
     result_expires=3600,
 )
 celery_app.conf.beat_schedule = {
