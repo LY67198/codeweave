@@ -36,6 +36,8 @@ class RootState(TypedDict, total=False):
         compact_threshold: 触发自动压缩的 token 阈值。
         compact_count: 已执行压缩的次数。
         last_compact_summary: 上一次压缩得到的摘要,可能为 None。
+        compact_pending: 是否已 dispatch Celery compact 但尚未 apply。
+        last_dispatched_compact_id: 上一条 dispatch 的 compact ID(UUID 字符串),可能为 None。
         next_agent: 下一个要运行的 Agent 名称。
         plan_mode: 是否处于 Plan Mode。
         recursion_remaining: LangGraph 递归剩余次数。
@@ -63,11 +65,13 @@ class RootState(TypedDict, total=False):
     compact_threshold: int
     compact_count: int
     last_compact_summary: str | None
+    compact_pending: bool
+    last_dispatched_compact_id: str | None
 
     # === 路由 ===
     next_agent: Literal[
         "supervisor", "explorer", "coder",
-        "reviewer", "executor", "compact", "__end__"
+        "reviewer", "executor", "compact", "compact_check", "__end__"
     ]
     plan_mode: bool
     recursion_remaining: int
