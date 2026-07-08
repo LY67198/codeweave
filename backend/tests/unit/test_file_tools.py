@@ -88,3 +88,35 @@ def test_write_file_path_traversal_blocked(workdir: Path):
     outside = workdir.parent / "evil.txt"
     with pytest.raises(ToolException, match="(workdir|escapes|外)"):
         write_file(path=str(outside), content="bad")
+
+
+def test_edit_file_exact_match_replaces(workdir: Path):
+    """old_text 唯一匹配时精确替换。"""
+    p = workdir / "code.py"
+    p.write_text("def foo():\n    return 1\n", encoding="utf-8")
+    result = edit_file(path=str(p), old_text="    return 1", new_text="    return 2")
+    assert "替换" in result or "replaced" in result.lower()
+    assert p.read_text(encoding="utf-8") == "def foo():\n    return 2\n"
+
+
+def test_edit_file_multiple_matches_raises(workdir: Path):
+    """old_text 多处匹配时报错,让 LLM 加上下文。"""
+    p = workdir / "dup.py"
+    p.write_text("x = 1\nx = 1\n", encoding="utf-8")
+    with pytest.raises(ToolException, match="(matched|次|多次|unique|context)"):
+        edit_file(path=str(p), old_text="x = 1", new_text="x = 2")
+
+
+def test_edit_file_no_match_raises(workdir: Path):
+    """old_text 没有匹配时报错。"""
+    p = workdir / "no.py"
+    p.write_text("hello", encoding="utf-8")
+    with pytest.raises(ToolException, match="(not found|未找到|没有匹配)"):
+        edit_file(path=str(p), old_text="world", new_text="earth")
+
+
+def test_edit_file_path_traversal_blocked(workdir: Path):
+    """越界路径拒绝编辑。"""
+    outside = workdir.parent / "evil.py"
+    with pytest.raises(ToolException, match="(workdir|escapes|外)"):
+        edit_file(path=str(outside), old_text="x", new_text="y")

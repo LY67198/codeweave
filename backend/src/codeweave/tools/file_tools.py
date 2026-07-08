@@ -114,9 +114,40 @@ def write_file(
     return f"已写入 {path} ({len(content_bytes)} bytes)"
 
 
-def edit_file(*args: Any, **kwargs: Any) -> None:  # pragma: no cover
-    """edit_file 占位 — Task 4 实装时删除此函数。"""
-    raise NotImplementedError("edit_file 尚未实现,见 Task 4")
+@register(name="edit_file", plan_mode_safe=False, requires_permission=False, category="file")
+def edit_file(
+    path: Annotated[str, "目标文件路径(相对于工作目录)"],
+    old_text: Annotated[str, "要被替换的原文本(必须唯一匹配)"],
+    new_text: Annotated[str, "替换后的新文本"],
+) -> str:
+    """精确字符串替换编辑文件。
+
+    Args:
+        path: 目标文件路径。
+        old_text: 必须唯一匹配文件中某段子串。
+        new_text: 替换内容。
+
+    Returns:
+        替换成功的提示。
+
+    Raises:
+        ToolException: 0 处或 >1 处匹配,或路径越界。
+    """
+    p = _check_path(path)
+    if not p.exists():
+        raise ToolException(f"文件不存在: {path}")
+    text = p.read_text(encoding="utf-8", errors="replace")
+    occurrences = text.count(old_text)
+    if occurrences == 0:
+        raise ToolException(f"old_text 未找到: 在 {path} 中没有匹配,无法替换")
+    if occurrences > 1:
+        raise ToolException(
+            f"old_text 在 {path} 中匹配了 {occurrences} 次(必须唯一),"
+            f"请在 old_text 中加入更多上下文"
+        )
+    new_text_full = text.replace(old_text, new_text, 1)
+    p.write_text(new_text_full, encoding="utf-8")
+    return f"已在 {path} 中完成替换"
 
 
 def grep_files(*args: Any, **kwargs: Any) -> None:  # pragma: no cover
