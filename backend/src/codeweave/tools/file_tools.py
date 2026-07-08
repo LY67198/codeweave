@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 from langchain_core.tools import ToolException
 
@@ -89,16 +89,17 @@ def read_file(
 # --- 占位 stub:让 test_file_tools.py 可以一次导入全部 4 个工具名 ---
 # 真实实现在 Task 3/4/5 中通过 @register 装饰器登记并替换这些 stub。
 # 当前测试套件仅针对 read_file,这些 stub 不会被调用。
-def write_file(*_args, **_kwargs):  # pragma: no cover - placeholder for Task 3
-    """占位 stub,真实 write_file 在 Task 3 实现。"""
-    raise NotImplementedError("write_file 将在 Task 3 实现")
+# --- 以下为占位 stub,Task 3/4/5 添加实装时请删除对应 stub ---
+def write_file(*args: Any, **kwargs: Any) -> None:  # pragma: no cover
+    """write_file 占位 — Task 3 实装时删除此函数。"""
+    raise NotImplementedError("write_file 尚未实现,见 Task 3")
 
 
-def edit_file(*_args, **_kwargs):  # pragma: no cover - placeholder for Task 4
-    """占位 stub,真实 edit_file 在 Task 4 实现。"""
-    raise NotImplementedError("edit_file 将在 Task 4 实现")
+def edit_file(*args: Any, **kwargs: Any) -> None:  # pragma: no cover
+    """edit_file 占位 — Task 4 实装时删除此函数。"""
+    raise NotImplementedError("edit_file 尚未实现,见 Task 4")
 
 
-def grep_files(*_args, **_kwargs):  # pragma: no cover - placeholder for Task 5
-    """占位 stub,真实 grep_files 在 Task 5 实现。"""
-    raise NotImplementedError("grep_files 将在 Task 5 实现")
+def grep_files(*args: Any, **kwargs: Any) -> None:  # pragma: no cover
+    """grep_files 占位 — Task 5 实装时删除此函数。"""
+    raise NotImplementedError("grep_files 尚未实现,见 Task 5")
