@@ -53,6 +53,5 @@ def build_execute_graph() -> StateGraph:
     # supervisor_node 返回的 Command.goto 已经直接处理路由
     # 但对于直接返回 dict 的节点也需要回退边
     builder.add_edge("explorer", "supervisor")
-    builder.add_edge("executor", "supervisor")
 
     return builder

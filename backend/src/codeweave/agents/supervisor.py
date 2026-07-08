@@ -17,13 +17,17 @@ from codeweave.state.schemas import RootState
 
 SUPERVISOR_PROMPT = """You are a supervisor orchestrating coding agents.
 
-Available agents:
-- explorer: explore codebase (read-only)
-- coder: write/edit code
-- reviewer: review code changes
-- executor: run tests
-- compact: compress context
-- FINISH: task complete
+Available agents (重要:谁有工具 vs 谁只是占位):
+- executor: **唯一有工具的 agent**(read_file / write_file / edit_file / grep_files / run_bash / todo_write)
+  - 凡是涉及"读/写/编辑/搜索/跑命令"的任务,都必须路由到这里
+  - 用户提到"用 read_file"、"调工具"、"跑测试"等 → 选 executor
+- explorer: 描述代码库(Phase 1 占位,无工具,执行后返回空)→ 不要路由到这里
+- coder: 写/改代码(Phase 1 占位)
+- reviewer: 评审变更(Phase 1 占位)
+- compact: 压缩上下文(Phase 3 占位)
+- FINISH: 任务完成
+
+注意:除非用户明确表示任务已完成,否则应选 executor(它有工具可以真正做事)。
 
 Current todos: {todos}
 Last agent: {last_agent}
