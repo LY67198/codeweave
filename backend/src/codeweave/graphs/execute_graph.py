@@ -8,6 +8,7 @@ from langgraph.graph import END, START, StateGraph
 from codeweave.agents import (
     coder_node, executor_node, explorer_node, reviewer_node, supervisor_node,
 )
+from codeweave.agents.executor import _get_executor_tool_node
 from codeweave.state.schemas import ExecuteState
 
 
@@ -31,6 +32,8 @@ def build_execute_graph() -> StateGraph:
     builder.add_node("coder", coder_node)
     builder.add_node("reviewer", reviewer_node)
     builder.add_node("executor", executor_node)
+    # ToolNode:执行 executor 产生的 tool_call
+    builder.add_node("tools", _get_executor_tool_node())
 
     # 入口：从父图进入 supervisor
     builder.add_edge(START, "supervisor")

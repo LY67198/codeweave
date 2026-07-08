@@ -23,7 +23,6 @@ __all__ = [
 
 # 触发子模块 import(让 @register 装饰器执行)
 # 注意:导入必须放在 __all__ 之后以避免循环引用
-# TODO(phase 2): re-enable when submodules are added in Tasks 2-8
-# from codeweave.tools import bash_tools  # noqa: E402, F401
-# from codeweave.tools import file_tools  # noqa: E402, F401
-# from codeweave.tools import todo_tools  # noqa: E402, F401
+from codeweave.tools import bash_tools  # noqa: E402, F401
+from codeweave.tools import file_tools  # noqa: E402, F401
+from codeweave.tools import todo_tools  # noqa: E402, F401
