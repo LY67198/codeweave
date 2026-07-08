@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     max_review_iterations: int = Field(default=3)
     max_recursion_limit: int = Field(default=50)
 
+    # === Store ===
+    store_namespace_global: str = Field(default="codeweave:global")
+    store_namespace_project: str = Field(default="codeweave:project")
+
     # === 服务端 ===
     api_host: str = Field(default="0.0.0.0")
     api_port: int = Field(default=8000)
