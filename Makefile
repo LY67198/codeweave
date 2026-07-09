@@ -1,7 +1,7 @@
 # CodeWeave Makefile
 # 使用正确的 flag 封装 uv 命令，以兼容工作区（Windows 上 uv 0.11.x 的特殊行为）
 
-.PHONY: sync install test test-backend test-integration lint format clean dev-up dev-down worker beat migrate migrate-new migrate-down
+.PHONY: sync install test test-backend test-integration lint format clean dev-up dev-down worker beat migrate migrate-new migrate-down serve
 
 sync:
 	uv sync --all-packages
@@ -49,3 +49,7 @@ migrate-new:
 
 migrate-down:
 	uv run --project backend alembic downgrade -1
+
+# Phase 4: FastAPI 开发服务器
+serve:
+	uv run --project backend uvicorn codeweave.api.main:app --reload --host 0.0.0.0 --port 8000
