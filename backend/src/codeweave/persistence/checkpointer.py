@@ -12,6 +12,20 @@ _pool: ConnectionPool | None = None
 _saver = None
 
 
+def _libpq_dsn(url: str) -> str:
+    """把 SQLAlchemy URL 转成 libpq DSN。
+
+    SQLAlchemy 接受 ``postgresql+psycopg://host/...`` 这种带 dialect
+    前缀的 URL,而 :class:`psycopg_pool.ConnectionPool` 的 ``conninfo``
+    直接交给 libpq,libpq 不认识 ``+psycopg`` 后缀,会报
+    ``missing "=" after "postgresql+psycopg://..."``。
+    这里简单剥掉 dialect 中缀,保留 ``postgresql://`` 给 libpq 解析。
+    """
+    if url.startswith("postgresql+") and "://" in url:
+        return "postgresql://" + url.split("://", 1)[1]
+    return url
+
+
 def _get_pool() -> ConnectionPool:
     """延迟初始化一个共享的 ConnectionPool。
 
@@ -26,7 +40,7 @@ def _get_pool() -> ConnectionPool:
     if _pool is None:
         settings = get_settings()
         _pool = ConnectionPool(
-            conninfo=settings.database_url,
+            conninfo=_libpq_dsn(settings.database_url),
             min_size=1,
             max_size=5,
             kwargs={"autocommit": True},
