@@ -15,6 +15,7 @@ class CodeModState(TypedDict, total=False):
     Attributes:
         request: 用户的原始修改请求。
         thread_id: LangGraph thread_id,贯穿所有 audit 事件。
+        skill_names: 可选 skill 名称白名单(Phase 7 启用过滤)。
         coder_diff: Coder 节点产出的 unified diff 文本。
         coder_message: Coder 节点的工具执行 summary(供前端 SSE 显示)。
         reviewer_decision: Reviewer 节点产出的完整决策 dict。
@@ -25,6 +26,7 @@ class CodeModState(TypedDict, total=False):
     """
     request: str
     thread_id: str
+    skill_names: NotRequired[list[str]]
 
     coder_diff: NotRequired[str]
     coder_message: NotRequired[str]

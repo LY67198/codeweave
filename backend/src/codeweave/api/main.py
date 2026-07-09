@@ -24,6 +24,7 @@ from sqlalchemy import text
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from codeweave.api.errors import register_exception_handlers
+from codeweave.api.routers.code_mod import router as code_mod_router
 from codeweave.api.routers.health import health_router
 from codeweave.api.routers.messages import router as messages_router
 from codeweave.api.routers.queries import router as queries_router
@@ -148,6 +149,7 @@ def build_app() -> FastAPI:
     app.include_router(health_router, prefix="")
     app.include_router(messages_router, prefix="/api/v1")
     app.include_router(queries_router, prefix="/api/v1")
+    app.include_router(code_mod_router, prefix="/api/v1")
     return app
 
 
