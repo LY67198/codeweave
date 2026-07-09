@@ -12,7 +12,15 @@ from codeweave.skills.state import CodeModState
 
 
 def _route_after_reviewer(state: CodeModState) -> str:
-    """Phase 5 route:accept | max_retries → finalize;else → coder。"""
+    """Phase 5 路由:Reviewer 后决定下一步。
+
+    Args:
+        state: ``CodeModState`` 子图当前状态。
+
+    Returns:
+        目标节点名:``"finalize"``(accept 或重试次数已达上限)或
+        ``"coder"``(reject 且还有重试次数)。
+    """
     d: dict[str, Any] = state.get("reviewer_decision", {}) or {}
     if d.get("accept"):
         return "finalize"
@@ -23,7 +31,15 @@ def _route_after_reviewer(state: CodeModState) -> str:
 
 
 def finalize_node(state: CodeModState) -> dict[str, Any]:
-    """收尾:产 final_status + approved_diff / last_feedback。"""
+    """收尾节点:产 final_status + approved_diff / last_feedback。
+
+    Args:
+        state: ``CodeModState`` 子图当前状态。
+
+    Returns:
+        ``approved`` 时:含 ``approved_diff`` + ``final_status``。
+        ``max_retries_exceeded`` 时:含 ``final_status`` + ``last_feedback``。
+    """
     d: dict[str, Any] = state.get("reviewer_decision", {}) or {}
     if d.get("accept"):
         return {
@@ -42,6 +58,11 @@ def build_coder_review_graph() -> StateGraph[CodeModState]:
 
     入口:coder → reviewer → (if accept or max) finalize → END
                                 ↘ else → coder
+
+    Returns:
+        未编译的 ``StateGraph[CodeModState]`` 构建器实例,
+        内含 ``coder`` / ``reviewer`` / ``finalize`` 三节点及
+        ``reviewer → {finalize, coder}`` 条件边。
     """
     g: StateGraph[CodeModState] = StateGraph(CodeModState)
     g.add_node("coder", coder_node)
