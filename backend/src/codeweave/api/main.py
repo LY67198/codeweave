@@ -31,7 +31,7 @@ from codeweave.config.settings import Settings, get_settings
 from codeweave.db.base import engine
 from codeweave.persistence.audit import AuditLogger
 from codeweave.persistence.checkpointer import get_checkpointer
-from codeweave.persistence.store import BaseStoreLike, make_store
+from codeweave.persistence.store import make_store
 from codeweave.services.token_tracker import TokenTracker
 
 
