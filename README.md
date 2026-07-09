@@ -11,7 +11,7 @@
 
 ## ✨ 功能特性
 
-### ✅ 已完成(Phase 1 + 2 + 3 + 4)
+### ✅ 已完成(Phase 1 + 2 + 3 + 4 + 5)
 
 - **多 Agent 架构** — Supervisor 调度 Explorer / Coder / Reviewer / Executor / Compact(Coder / Reviewer 仍占位,Phase 4+ LLM 接入)
 - **Tool System** — `ToolRegistry` + 6 个工具:`read_file` / `write_file` / `edit_file` / `grep_files` / `run_bash` / `todo_write`
@@ -36,13 +36,21 @@
 - **`/readyz` k8s probe** — DB + Redis 健康检查
 - **Trace ID** — `X-Request-ID` header 自动注入 + 流到 audit_events
 
-### 🔜 计划中(Phase 5–7)
+### ✅ Phase 5 已完成(Loop Engineering Foundation: Coder / Reviewer / Skill)
 
-- **Vue 3 Web SPA** — 主客户端(Phase 5,会接 Phase 4 的 FastAPI + SSE)
+- **Coder Agent** — 接收 code-mod request,`bind_tools` 调 file / edit / bash 工具,产出 unified diff 写回 state
+- **Reviewer Agent** — 读 Coder 的 diff,5 维度评审(正确性 / 安全性 / 测试 / 风格 / spec 一致性),输出严格 JSON 决定 accept / reject
+- **Skill file system** — `backend/skills/codeweave-{coder,reviewer}/SKILL.md` + pitfalls.md,YAML frontmatter(name / description / when_to_use / priority)+ Markdown body
+- **Maker-Checker subgraph** — `coder → reviewer → (accept | max_retries) → finalize`,retry cap = 3,超过进 `max_retries_exceeded`
+- **Sensitive 路径硬拒** — `_coder_diff._dispatch` 工具入口调用 `is_sensitive_path` 黑名单(`.ssh / .env / /etc` 等),命中直接抛 PermissionError
+- **Loop Engineering foundation** — Maker/Checker 循环 + Skill 注入 + Reviewer JSON 解析容错(json5 + reject-default),给 Phase 7 Skills & MCP 打地基
+
+### 🔜 计划中(Phase 6–7)
+
+- **Vue 3 Web SPA** — 主客户端(Phase 6,会接 Phase 4 的 FastAPI + SSE)
 - **`cw` CLI** — 终端客户端(Phase 6,同上)
 - **Skills & MCP** — Markdown skills + Model Context Protocol(Phase 7)
 - **Nginx + Docker Demo** — 一条命令启动生产环境(Phase 7)
-- **Coder / Reviewer LLM 实装** — 用工具调用写代码 + 跑 build/test 反馈(Phase 7 视需要而定)
 
 ## 🏗️ 架构
 
@@ -81,6 +89,8 @@
 - **[设计文档](docs/superpowers/specs/2026-07-08-codeweave-design.md)** — 完整架构 spec
 - **[Phase 2 Tool System 设计](docs/superpowers/specs/2026-07-08-phase2-tool-system-design.md)** — Tool System 设计 spec
 - **[Phase 3 Persistence + Celery 设计](docs/superpowers/specs/2026-07-08-phase3-persistence-celery-design.md)** — audit / store / compact 设计 spec
+- **[Phase 5 Loop Engineering Foundation 设计](docs/superpowers/specs/2026-07-08-phase5-loop-foundation-design.md)** — Coder / Reviewer / Skill / Maker-Checker 循环 spec
+- **[Skill Registry 索引](backend/skills/README.md)** — 2 个 demo skills(Phase 5),加新 skill 的流程
 - **Demo 脚本**(即将推出)
 - **[API 路由速查](backend/src/codeweave/api/README.md)** — FastAPI 全部 9 个端点 + curl 4 场景(HITL / SSE / 重连)
 - **OpenAPI 3.1 schema** — 启动后访问 `http://localhost:8000/docs` 看 Swagger UI
@@ -139,7 +149,12 @@ curl -N -X POST http://localhost:8000/api/v1/threads/demo/messages \
   -H "Content-Type: application/json" \
   -d '{"content": "读 backend/src/codeweave/api/main.py,简要回答。"}'
 
-# 12. 前端(Phase 5)/ CLI(Phase 6)— 即将推出
+# 12. 端到端 code-mod(Maker/Checker 循环 + SSE)
+curl -N -X POST http://localhost:8000/api/v1/threads/demo/code-mod \
+  -H "Content-Type: application/json" \
+  -d '{"request": "在 backend/src/codeweave/tools/registry.py 加一个 require_permission 装饰器"}'
+
+# 13. 前端(Phase 6)/ CLI(Phase 6)— 即将推出
 ```
 
 **注意:** 所有 `uv run` 命令必须从**项目根目录** `D:/Mini_Code/` 运行(不能从 `backend/`),因为 `pydantic-settings` 按 CWD 解析 `.env`。
@@ -176,25 +191,28 @@ curl -N -X POST http://localhost:8000/api/v1/threads/demo/messages \
 codeweave/
 ├── backend/
 │   ├── src/codeweave/
-│   │   ├── agents/     # supervisor / explorer / coder / reviewer / executor / compact
+│   │   ├── agents/     # ✅ supervisor / explorer / coder / reviewer / executor / compact
 │   │   │               # compact_check_node(Phase 3 接 execute_graph 入口)
-│   │   │               # coder / reviewer 仍占位,Phase 4+ LLM 接入
-│   │   ├── graphs/     # root / plan_graph / execute_graph
+│   │   │               # coder / reviewer ✅ Phase 5 LLM 实装(bind_tools + skill prompt)
+│   │   ├── graphs/     # ✅ root / plan_graph / execute_graph / coder_review_subgraph
 │   │   │               # execute_graph START → compact_check ⇢ executor ⇄ tools
-│   │   ├── state/      # RootState / PlanState / ExecuteState + reducers
+│   │   │               # coder_review_subgraph(Phase 5)START → coder ⇄ reviewer → finalize → END
+│   │   ├── state/      # RootState / PlanState / ExecuteState + CodeModState(Phase 5)+ reducers
 │   │   ├── tools/      # ✅ registry + file_tools + bash_tools + todo_tools
 │   │   │               # 每个 tool 加 audit 装饰 emit tool_call 事件
+│   │   ├── skills/     # ✅ Phase 5 Skill 系统(schemas / loader / security / state)
 │   │   ├── persistence/  # PostgresSaver + audit.py(AuditLogger) + store.py(InMemoryStoreShim)
 │   │   ├── db/         # ✅ SQLAlchemy 2.x base + ORM + Alembic(3 张表 + partial unique)
 │   │   ├── config/     # Settings + model provider
 │   │   ├── services/   # ✅ token_tracker + compact_logic 纯函数
 │   │   ├── tasks/      # ✅ Celery + compact_thread + token_aggregate + cleanup
-│   │   ├── prompts/    # ✅ compact.jinja 中文摘要模板
+│   │   ├── prompts/    # ✅ compact.jinja 中文摘要模板 + coder/reviewer(Phase 5)
 │   │   └── api/        # ✅ Phase 4 FastAPI routes + routers/ + sse.py + README
-│   └── tests/          # 116 unit + 6 integration
-├── frontend/          # (Phase 5) Vue 3 SPA
+│   │                   # routers/code_mod.py ✅ Phase 5 POST /code-mod + SSE
+│   ├── skills/         # ✅ Phase 5 demo skills(codeweave-coder / codeweave-reviewer)
+│   └── tests/          # 179+ unit + 6 integration + 1 real-LLM e2e
+├── frontend/          # (Phase 6) Vue 3 SPA
 ├── cli/               # (Phase 6) cw terminal client
-├── skills/            # (Phase 7) Built-in Skills
 ├── deploy/            # (Phase 7) Nginx + Docker config
 ├── docs/superpowers/  # Specs & plans(本地,gitignore)
 └── docker-compose.yml
