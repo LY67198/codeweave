@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 
+from codeweave.api.errors import register_exception_handlers
 from codeweave.api.routers.health import health_router
 
 
@@ -16,6 +17,7 @@ def build_app() -> FastAPI:
         redoc_url=None,
         openapi_url="/openapi.json",
     )
+    register_exception_handlers(app)
     app.include_router(health_router, prefix="")
     return app
 
