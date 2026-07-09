@@ -24,6 +24,9 @@ class Settings(BaseSettings):
         max_recursion_limit: LangGraph 递归限制。
         api_host: API 服务监听地址。
         api_port: API 服务监听端口。
+        skills_root: Skill 文件系统根目录(Phase 5)。
+        code_mod_max_retries: Code-Modify 失败重试上限(Phase 5)。
+        coder_reviewer_max_output_tokens: Coder/Reviewer LLM 输出 token 上限(Phase 5)。
     """
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -67,6 +70,11 @@ class Settings(BaseSettings):
     # === Store ===
     store_namespace_global: str = Field(default="codeweave:global")
     store_namespace_project: str = Field(default="codeweave:project")
+
+    # === Skill 系统 / Maker-Checker(Phase 5)===
+    skills_root: str = Field(default="backend/skills")
+    code_mod_max_retries: int = Field(default=3, ge=1, le=10)
+    coder_reviewer_max_output_tokens: int = Field(default=8000, ge=500, le=32000)
 
     # === 服务端 ===
     api_host: str = Field(default="0.0.0.0")
