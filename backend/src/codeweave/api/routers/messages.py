@@ -48,38 +48,6 @@ _active_streams: dict[str, asyncio.Event] = {}
 _LAST_INTERRUPT_IDS: dict[str, str] = {}
 
 
-def _normalize_chunk(chunk: Any) -> tuple[str, dict[str, Any]]:
-    """把 LangGraph ``stream_mode="updates"`` 的 chunk 规整成 ``(node, update)`` 元组。
-
-    LangGraph 当前版本产出的 chunk 实际是 dict shape:
-      - 正常更新:``{node_name: state_update_dict | None}``
-      - interrupt:``{"__interrupt__": (Interrupt(...),)}``
-    而 :func:`codeweave.api.sse.chunk_to_event` 是按 tuple shape 写的
-    (Phase 2 frozen)。这里在 router 层做一次规整,sse.py 不动。
-
-    Args:
-        chunk: LangGraph ``graph.stream(..., stream_mode="updates")`` 单步产出。
-
-    Returns:
-        ``(node_name, update_dict)``。若 chunk 形态无法识别,node 设为
-        ``"<unknown>"``,update 含原始 chunk(便于 audit 排查)。
-    """
-    if isinstance(chunk, tuple) and len(chunk) == 2:
-        return chunk[0], chunk[1] or {}
-    if isinstance(chunk, dict):
-        # interrupt 事件:{__interrupt__: tuple[Interrupt, ...]}
-        if "__interrupt__" in chunk:
-            # 假装是来自触发它的节点(信息不足以定位节点,标 None)
-            return "tools", dict(chunk)
-        # 正常更新:{node_name: update_dict}
-        if len(chunk) == 1:
-            node_name, update = next(iter(chunk.items()))
-            return str(node_name), update or {}
-        # 多 key 不应出现,兜底
-        return "<unknown>", dict(chunk)
-    return "<unknown>", {"raw": chunk}
-
-
 def _acquire_stream_slot(thread_id: str) -> asyncio.Event:
     """抢占同 thread 的 in-flight stream slot,已有则 409。
 
@@ -188,11 +156,8 @@ async def _stream_graph(
         if chunk is SENTINEL:
             break
         try:
-            # 把 LangGraph dict-shape chunk 规整成 (node, update) 给 chunk_to_event
-            node, update = _normalize_chunk(chunk)
-            evt = chunk_to_event(
-                (node, update), thread_id=thread_id, trace_id=trace_id
-            )
+            # chunk_to_event 已支持 LangGraph dict-shape + tuple-shape + interrupt chunk
+            evt = chunk_to_event(chunk, thread_id=thread_id, trace_id=trace_id)
             # 记下 interrupt_id 给 /resume 防 replay 用
             if evt.event == "hitl_requested":
                 _LAST_INTERRUPT_IDS[thread_id] = evt.data.get("interrupt_id", "")

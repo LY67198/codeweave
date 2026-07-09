@@ -58,3 +58,47 @@ def test_handles_unknown_chunk_gracefully():
     evt = chunk_to_event(chunk, thread_id="t-1", trace_id="trace-1")
     # 应该不抛,产生一个 fallback 事件
     assert evt.event in {"node_end", "messages_update"}
+
+
+# 以下覆盖 LangGraph 实际产出 shape — Task 8 验证后补(LangGraph stream_mode="updates"
+# 真产出 dict shape,Task 4 / Task 7 旧 tuple shape 测试被保留作 compat)
+
+
+def test_dict_shape_node_end_chunk():
+    """LangGraph 真产出:``{"node_name": state_update_dict}`` 的 dict。"""
+    chunk = {"executor": {"_agent_history": ["h1"], "todos": []}}
+    evt = chunk_to_event(chunk, thread_id="t-1", trace_id="trace-1")
+    assert evt.event == "node_end"
+    assert evt.node == "executor"
+    assert evt.data["_agent_history"] == ["h1"]
+
+
+def test_dict_shape_messages_update():
+    chunk = {"executor": {"messages": [HumanMessage_spec := "hello"]}}
+    # 用 MagicMock 形式避免 import BaseMessage
+    import sys
+    from unittest.mock import MagicMock
+    bm = MagicMock()
+    bm.type = "human"
+    bm.content = "hello"
+    chunk = {"executor": {"messages": [bm]}}
+    evt = chunk_to_event(chunk, thread_id="t-1", trace_id="trace-1")
+    assert evt.event == "messages_update"
+    assert "messages" in evt.data
+
+
+def test_dict_shape_interrupt():
+    """LangGraph 真产出:``{"__interrupt__": (Interrupt(...),)}`` 的 dict。"""
+    interrupt_value = Interrupt(value={"prompt": "approve?", "tool": "run_bash", "command": "rm /"})
+    chunk = {"__interrupt__": (interrupt_value,)}
+    evt = chunk_to_event(chunk, thread_id="t-1", trace_id="trace-1")
+    assert evt.event == "hitl_requested"
+    assert "interrupt_id" in evt.data
+    assert evt.data["tool"] == "run_bash"
+
+
+def test_dict_shape_empty_fallback():
+    chunk = {"__metadata__": ["internal"]}
+    evt = chunk_to_event(chunk, thread_id="t-1", trace_id="trace-1")
+    assert evt.event == "node_end"
+    assert "raw" in evt.data
