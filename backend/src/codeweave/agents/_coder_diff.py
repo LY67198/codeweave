@@ -94,7 +94,7 @@ def _dispatch(name: str, args: dict[str, Any], repo_root: Path) -> dict[str, Any
         if name == "grep_files":
             from codeweave.tools.file_tools import grep_files
             return {"tool": name, "ok": True, "output": grep_files(pattern=args.get("pattern", ""))}
-        if name == "bash":
+        if name in {"bash", "run_bash"}:
             from codeweave.tools.bash_tools import run_bash
             return {"tool": name, "ok": True, "output": run_bash(command=args.get("command", ""))[:1000]}
     except Exception as exc:
@@ -122,12 +122,15 @@ def _collect_diffs(writes: dict[str, bool], repo_root: Path) -> str:
         if not ok:
             continue
         p = Path(path_str)
+        # 相对路径以 repo_root 为基准解析(对齐 write_file 工具对 WORK_DIR 的处理)
+        if not p.is_absolute():
+            p = (repo_root / p).resolve()
         try:
             after = p.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
         try:
-            rel = p.resolve().relative_to(repo_root).as_posix()
+            rel = p.relative_to(repo_root).as_posix()
         except ValueError:
             rel = p.as_posix()
         before = ""  # Phase 7 升级为 git HEAD

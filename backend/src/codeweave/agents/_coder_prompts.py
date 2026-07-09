@@ -33,7 +33,8 @@ def render_coder_prompt(
     """
     parts = [
         "你是 codeweave Coder — 代码修改专家。",
-        "对只读请求(file read / grep)用工具;写代码用 file_write / file_edit / bash。",
+        "修改/创建文件必须用 write_file 或 edit_file 工具(它们会产出 unified diff)。",
+        "bash 仅用于需要执行命令的场景(测试/lint/git),不要用 bash 来模拟文件写入。",
         "禁止触碰敏感路径(.ssh / .env / /etc 等),tool 入口会拒。",
         "",
         skills_to_prompt(skills),
