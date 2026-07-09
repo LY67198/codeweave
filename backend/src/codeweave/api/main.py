@@ -26,6 +26,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from codeweave.api.errors import register_exception_handlers
 from codeweave.api.routers.health import health_router
 from codeweave.api.routers.messages import router as messages_router
+from codeweave.api.routers.queries import router as queries_router
 from codeweave.config.settings import Settings, get_settings
 from codeweave.db.base import engine
 from codeweave.persistence.audit import AuditLogger
@@ -146,6 +147,7 @@ def build_app() -> FastAPI:
     register_exception_handlers(app)
     app.include_router(health_router, prefix="")
     app.include_router(messages_router, prefix="/api/v1")
+    app.include_router(queries_router, prefix="/api/v1")
     return app
 
 

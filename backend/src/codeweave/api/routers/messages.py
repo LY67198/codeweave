@@ -7,18 +7,23 @@
 
 并发保护用进程内 ``_active_streams`` 注册表:同 thread 已有 in-flight
 流就 409,避免 LangGraph checkpointer 的 race 条件。
+
+HITL 防 replay 用 ``_LAST_INTERRUPT_IDS`` 进程内缓存:每次 ``_stream_graph``
+观察到 ``hitl_requested`` event,记录 ``thread_id → interrupt_id``;
+``/resume`` 时校验 body 的 interrupt_id 是否匹配,不匹配则 422。
 """
 from __future__ import annotations
 
 import asyncio
 import json
 from collections import OrderedDict
-from typing import Any, AsyncIterator
+from typing import Any, AsyncIterator, Callable
 
 from fastapi import APIRouter, Depends, Request
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph.state import CompiledStateGraph
+from langgraph.types import Command
 from sse_starlette.event import ServerSentEvent
 from sse_starlette.sse import EventSourceResponse
 
@@ -35,6 +40,44 @@ router = APIRouter(prefix="/threads/{thread_id}", tags=["messages"])
 # 进程内 in-flight stream registry(thread_id → asyncio.Event)
 # 简单 in-memory 实现,Phase 4 demo 够用;Phase 7 可换 Redis flag
 _active_streams: dict[str, asyncio.Event] = {}
+
+
+# 进程内最近一次 hitl_requested 事件 id(thread_id → interrupt_id)
+# /resume 用此防 replay:body.interrupt_id 必须匹配,否则 422。
+# Phase 4 demo 用 in-memory 缓存;Phase 7 可换 Redis。stream 完成后会 pop。
+_LAST_INTERRUPT_IDS: dict[str, str] = {}
+
+
+def _normalize_chunk(chunk: Any) -> tuple[str, dict[str, Any]]:
+    """把 LangGraph ``stream_mode="updates"`` 的 chunk 规整成 ``(node, update)`` 元组。
+
+    LangGraph 当前版本产出的 chunk 实际是 dict shape:
+      - 正常更新:``{node_name: state_update_dict | None}``
+      - interrupt:``{"__interrupt__": (Interrupt(...),)}``
+    而 :func:`codeweave.api.sse.chunk_to_event` 是按 tuple shape 写的
+    (Phase 2 frozen)。这里在 router 层做一次规整,sse.py 不动。
+
+    Args:
+        chunk: LangGraph ``graph.stream(..., stream_mode="updates")`` 单步产出。
+
+    Returns:
+        ``(node_name, update_dict)``。若 chunk 形态无法识别,node 设为
+        ``"<unknown>"``,update 含原始 chunk(便于 audit 排查)。
+    """
+    if isinstance(chunk, tuple) and len(chunk) == 2:
+        return chunk[0], chunk[1] or {}
+    if isinstance(chunk, dict):
+        # interrupt 事件:{__interrupt__: tuple[Interrupt, ...]}
+        if "__interrupt__" in chunk:
+            # 假装是来自触发它的节点(信息不足以定位节点,标 None)
+            return "tools", dict(chunk)
+        # 正常更新:{node_name: update_dict}
+        if len(chunk) == 1:
+            node_name, update = next(iter(chunk.items()))
+            return str(node_name), update or {}
+        # 多 key 不应出现,兜底
+        return "<unknown>", dict(chunk)
+    return "<unknown>", {"raw": chunk}
 
 
 def _acquire_stream_slot(thread_id: str) -> asyncio.Event:
@@ -100,10 +143,11 @@ def _get_compiled_graph(
 async def _stream_graph(
     graph: CompiledStateGraph[Any, Any, Any, Any],
     config: RunnableConfig,
-    input_dict: dict[str, Any],
+    input_dict: dict[str, Any] | Command[Any],
     audit: AuditLogger,
     trace_id: str,
     thread_id: str,
+    on_complete: Callable[[], None] | None = None,
 ) -> AsyncIterator[ServerSentEvent]:
     """把同步 ``graph.stream`` 包装成异步 SSE 事件流(§3.6)。
 
@@ -113,10 +157,11 @@ async def _stream_graph(
     Args:
         graph: 编译好的 LangGraph 图。
         config: LangGraph ``configurable.thread_id`` 配置。
-        input_dict: 推入 graph 的初始 state(``{"messages": [...]}`` 等)。
+        input_dict: 推入 graph 的初始 state 或 ``Command``(resume / goto)。
         audit: AuditLogger,中间转换错误会写 audit。
         trace_id: 贯穿请求追踪 id。
         thread_id: 当前 thread 主键(写进每个 event 上下文)。
+        on_complete: stream 自然结束后回调(用于清理 ``_LAST_INTERRUPT_IDS``)。
 
     Yields:
         ``ServerSentEvent`` 对象(交给 sse-starlette 序列化,而不是预格式化字符串,
@@ -143,7 +188,14 @@ async def _stream_graph(
         if chunk is SENTINEL:
             break
         try:
-            evt = chunk_to_event(chunk, thread_id=thread_id, trace_id=trace_id)
+            # 把 LangGraph dict-shape chunk 规整成 (node, update) 给 chunk_to_event
+            node, update = _normalize_chunk(chunk)
+            evt = chunk_to_event(
+                (node, update), thread_id=thread_id, trace_id=trace_id
+            )
+            # 记下 interrupt_id 给 /resume 防 replay 用
+            if evt.event == "hitl_requested":
+                _LAST_INTERRUPT_IDS[thread_id] = evt.data.get("interrupt_id", "")
         except Exception as exc:
             audit.emit(
                 "api_sse_translate_error",
@@ -155,6 +207,10 @@ async def _stream_graph(
             data=json.dumps(evt.model_dump(mode="json"), ensure_ascii=False),
             event=evt.event,
         )
+
+    # stream 自然结束,先清 replay guard(若有),再发 done
+    if on_complete is not None:
+        on_complete()
 
     # 末尾发 done 事件
     done_evt = StreamEvent(
@@ -225,7 +281,13 @@ async def post_resume(
     trace_id: str = Depends(get_trace_id),
     audit: AuditLogger = Depends(get_audit),
 ) -> EventSourceResponse:
-    """HITL 决策继续。先读上次 interrupt id 防 replay(Phase 4 简化先不验证)。
+    """HITL 决策继续。``interrupt_id`` 必须匹配上次 ``hitl_requested`` event。
+
+    实现细节:
+    1. 读 ``_LAST_INTERRUPT_IDS.get(thread_id)``,若与 ``body.interrupt_id``
+       不一致则 422 ``interrupt_id_mismatch``(防 replay);
+    2. 用 ``Command(resume=body.decision)`` 推进 graph;
+    3. stream 自然结束后,``on_complete`` 回调清掉 ``_LAST_INTERRUPT_IDS``。
 
     Args:
         thread_id: thread 主键(path param)。
@@ -236,25 +298,57 @@ async def post_resume(
 
     Returns:
         ``EventSourceResponse``,``text/event-stream``。
+
+    Raises:
+        ApiError: interrupt_id 不匹配时 422。
     """
     ev = _acquire_stream_slot(thread_id)
+    last_interrupt_id = _LAST_INTERRUPT_IDS.get(thread_id)
+    if last_interrupt_id and body.interrupt_id != last_interrupt_id:
+        audit.emit(
+            "api_resume_interrupt_mismatch",
+            {
+                "expected": last_interrupt_id,
+                "received": body.interrupt_id,
+                "trace_id": trace_id,
+            },
+            thread_id=thread_id,
+        )
+        raise ApiError(
+            code="interrupt_id_mismatch",
+            message=(
+                f"interrupt_id 不匹配:期望 {last_interrupt_id},"
+                f"收到 {body.interrupt_id}"
+            ),
+            status_code=422,
+        )
+
     config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
     graph = _get_compiled_graph(request, thread_id)
     audit.emit(
         "api_post_resume",
-        {"interrupt_id": body.interrupt_id, "decision": body.decision, "trace_id": trace_id},
+        {
+            "interrupt_id": body.interrupt_id,
+            "decision": body.decision,
+            "trace_id": trace_id,
+        },
         thread_id=thread_id,
     )
+
+    def _clear_last_interrupt() -> None:
+        """stream 自然结束后清掉该 thread 的 last interrupt id。"""
+        _LAST_INTERRUPT_IDS.pop(thread_id, None)
 
     async def _gen() -> AsyncIterator[ServerSentEvent]:
         try:
             async for chunk in _stream_graph(
                 graph,
                 config,
-                {"messages": []},  # Phase 4 简化:不调 Command,只走 resume path
+                Command(resume=body.decision),
                 audit=audit,
                 trace_id=trace_id,
                 thread_id=thread_id,
+                on_complete=_clear_last_interrupt,
             ):
                 yield chunk
         finally:
