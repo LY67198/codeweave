@@ -80,6 +80,47 @@ def _handle_state_update(
     trace_id: str,
 ) -> StreamEvent:
     """根据 update dict 内容映射到具体 event 类型。"""
+    # Phase 5: 4 类 code-mod 专用 event 先识别
+    # 注意顺序:retry_count 优先于 coder_diff,因为 coder_node 同时写这两个 key,
+    # 重试场景的语义信号是 retry_count(front-end 据此显示「正在重试」)
+    if "retry_count" in update and (
+        "final_status" not in update  # finalize_node 也写 retry_count,要排除
+    ):
+        return StreamEvent(
+            event="coder_retry",
+            node=node,
+            thread_id=thread_id,
+            data={"retry_count": update["retry_count"]},
+            trace_id=trace_id,
+        )
+    if "coder_diff" in update:
+        return StreamEvent(
+            event="coder_diff",
+            node=node,
+            thread_id=thread_id,
+            data={"coder_diff": update["coder_diff"]},
+            trace_id=trace_id,
+        )
+    if "reviewer_decision" in update:
+        return StreamEvent(
+            event="reviewer_decision",
+            node=node,
+            thread_id=thread_id,
+            data={"reviewer_decision": update["reviewer_decision"]},
+            trace_id=trace_id,
+        )
+    # finalize_node 的输出也写 approved_diff,识别为 done
+    if "approved_diff" in update and "final_status" in update:
+        return StreamEvent(
+            event="done",
+            node=node,
+            thread_id=thread_id,
+            data={
+                "final_status": update.get("final_status"),
+                "approved_diff": update.get("approved_diff"),
+            },
+            trace_id=trace_id,
+        )
     has_messages = "messages" in update
     has_compact = "compact_pending" in update or "last_dispatched_compact_id" in update
 

@@ -102,3 +102,37 @@ def test_dict_shape_empty_fallback():
     evt = chunk_to_event(chunk, thread_id="t-1", trace_id="trace-1")
     assert evt.event == "node_end"
     assert "raw" in evt.data
+
+
+def test_dict_shape_coder_diff_emits_coder_diff_event():
+    """coder 节点产出 coder_diff → 映射 coder_diff event。"""
+    chunk = {"coder": {"coder_diff": "--- x.py\n+new\n"}}
+    evt = chunk_to_event(chunk, thread_id="t", trace_id="tr")
+    assert evt.event == "coder_diff"
+    assert evt.node == "coder"
+    assert "x.py" in evt.data.get("coder_diff", "")
+
+
+def test_dict_shape_reviewer_decision_emits_reviewer_decision_event():
+    """reviewer 节点产出 reviewer_decision → 映射 reviewer_decision event。"""
+    chunk = {"reviewer": {"reviewer_decision": {"accept": True, "score": 8, "feedback": "ok", "risk_flags": []}}}
+    evt = chunk_to_event(chunk, thread_id="t", trace_id="tr")
+    assert evt.event == "reviewer_decision"
+    assert evt.node == "reviewer"
+    assert evt.data["reviewer_decision"]["accept"] is True
+
+
+def test_dict_shape_retry_count_increment_emits_coder_retry():
+    """coder retry 时 retry_count 自增 → 映射 coder_retry event。"""
+    chunk = {"coder": {"coder_diff": "--- x", "retry_count": 2}}
+    evt = chunk_to_event(chunk, thread_id="t", trace_id="tr")
+    assert evt.event == "coder_retry"
+    assert evt.data.get("retry_count") == 2
+
+
+def test_dict_shape_no_special_keys_falls_to_node_end():
+    """无特殊字段 → 普通 node_end(向后兼容)。"""
+    chunk = {"executor": {"_agent_history": ["x"]}}
+    evt = chunk_to_event(chunk, thread_id="t", trace_id="tr")
+    assert evt.event == "node_end"
+    assert evt.node == "executor"

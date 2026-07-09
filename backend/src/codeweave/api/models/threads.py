@@ -34,6 +34,8 @@ class StreamEvent(BaseModel):
         "tool_call", "tool_result",
         "compact_started", "compact_done",
         "hitl_requested", "done", "error",
+        # Phase 5: code-mod 专用 event 类型
+        "coder_diff", "reviewer_decision", "coder_retry",
     ] = Field(..., description="事件类型")
     node: str | None = Field(default=None, description="哪个节点产出")
     thread_id: str = Field(..., description="所属 thread")
