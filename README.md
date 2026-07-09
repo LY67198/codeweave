@@ -11,7 +11,7 @@
 
 ## ✨ 功能特性
 
-### ✅ 已完成(Phase 1 + 2 + 3)
+### ✅ 已完成(Phase 1 + 2 + 3 + 4)
 
 - **多 Agent 架构** — Supervisor 调度 Explorer / Coder / Reviewer / Executor / Compact(Coder / Reviewer 仍占位,Phase 4+ LLM 接入)
 - **Tool System** — `ToolRegistry` + 6 个工具:`read_file` / `write_file` / `edit_file` / `grep_files` / `run_bash` / `todo_write`
@@ -28,14 +28,21 @@
 - **Alembic 迁移** — 首版 migration `0001_init_audit_compact_token` 建 3 张表 + 索引
 - **真实 LLM 验证** — DeepSeek v4-flash / v4-pro 端到端跑通(compact 摘要真调用 LLM 回写,116 单测 + 6 集成测)
 
-### 🔜 计划中(Phase 4–7)
+### ✅ Phase 4 已完成(FastAPI + SSE)
 
-- **SSE 流式输出** — FastAPI 逐 token 输出(Phase 4)
-- **Vue 3 Web SPA** — 主客户端(Phase 5)
-- **`cw` CLI** — 终端客户端(Phase 6)
+- **REST API + SSE 流** — `/api/v1/threads/{id}/messages`(SSE)/ `resume`(HITL)/ `state` / `timeline` / `cost`
+- **工程化 lifespan** — PostgresSaver + Redis + Audit + Store + graph LRU 缓存
+- **OpenAPI 3.1** — `/docs` Swagger UI + `/openapi.json`
+- **`/readyz` k8s probe** — DB + Redis 健康检查
+- **Trace ID** — `X-Request-ID` header 自动注入 + 流到 audit_events
+
+### 🔜 计划中(Phase 5–7)
+
+- **Vue 3 Web SPA** — 主客户端(Phase 5,会接 Phase 4 的 FastAPI + SSE)
+- **`cw` CLI** — 终端客户端(Phase 6,同上)
 - **Skills & MCP** — Markdown skills + Model Context Protocol(Phase 7)
 - **Nginx + Docker Demo** — 一条命令启动生产环境(Phase 7)
-- **Coder / Reviewer LLM 实装** — 用工具调用写代码 + 跑 build/test 反馈(Phase 4 / Phase 7 视 FastAPI 拓扑需要而定)
+- **Coder / Reviewer LLM 实装** — 用工具调用写代码 + 跑 build/test 反馈(Phase 7 视需要而定)
 
 ## 🏗️ 架构
 
@@ -75,7 +82,8 @@
 - **[Phase 2 Tool System 设计](docs/superpowers/specs/2026-07-08-phase2-tool-system-design.md)** — Tool System 设计 spec
 - **[Phase 3 Persistence + Celery 设计](docs/superpowers/specs/2026-07-08-phase3-persistence-celery-design.md)** — audit / store / compact 设计 spec
 - **Demo 脚本**(即将推出)
-- **API 参考**(Phase 4 FastAPI 自动生成)
+- **[API 路由速查](backend/src/codeweave/api/README.md)** — FastAPI 全部 9 个端点 + curl 4 场景(HITL / SSE / 重连)
+- **OpenAPI 3.1 schema** — 启动后访问 `http://localhost:8000/docs` 看 Swagger UI
 
 ## 🚀 快速开始
 
@@ -122,7 +130,16 @@ r = app.invoke(
 print('final answer:', r['messages'][-1].content[:200])
 "
 
-# 10. 前端(Phase 5)/ CLI(Phase 6)— 即将推出
+# 10. 启 FastAPI 服务器(Phase 4)
+make serve
+# 浏览 http://localhost:8000/docs 看交互式 API
+
+# 11. 端到端 curl(普通对话流)
+curl -N -X POST http://localhost:8000/api/v1/threads/demo/messages \
+  -H "Content-Type: application/json" \
+  -d '{"content": "读 backend/src/codeweave/api/main.py,简要回答。"}'
+
+# 12. 前端(Phase 5)/ CLI(Phase 6)— 即将推出
 ```
 
 **注意:** 所有 `uv run` 命令必须从**项目根目录** `D:/Mini_Code/` 运行(不能从 `backend/`),因为 `pydantic-settings` 按 CWD 解析 `.env`。
@@ -173,7 +190,7 @@ codeweave/
 │   │   ├── services/   # ✅ token_tracker + compact_logic 纯函数
 │   │   ├── tasks/      # ✅ Celery + compact_thread + token_aggregate + cleanup
 │   │   ├── prompts/    # ✅ compact.jinja 中文摘要模板
-│   │   └── api/        # (Phase 4) FastAPI routes
+│   │   └── api/        # ✅ Phase 4 FastAPI routes + routers/ + sse.py + README
 │   └── tests/          # 116 unit + 6 integration
 ├── frontend/          # (Phase 5) Vue 3 SPA
 ├── cli/               # (Phase 6) cw terminal client
