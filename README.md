@@ -11,26 +11,31 @@
 
 ## ✨ 功能特性
 
-### ✅ 已完成(Phase 1 + Phase 2)
+### ✅ 已完成(Phase 1 + 2 + 3)
 
-- **多 Agent 架构** — Supervisor 调度 Explorer / Coder / Reviewer / Executor / Compact
+- **多 Agent 架构** — Supervisor 调度 Explorer / Coder / Reviewer / Executor / Compact(Coder / Reviewer 仍占位,Phase 4+ LLM 接入)
 - **Tool System** — `ToolRegistry` + 6 个工具:`read_file` / `write_file` / `edit_file` / `grep_files` / `run_bash` / `todo_write`
 - **WORK_DIR 沙箱** — 所有文件工具强制工作目录边界
 - **HITL 权限审批** — 危险 bash 命令通过 `langgraph.types.interrupt` 暂停 graph 等用户批准
 - **标准 ReAct** — Executor ⇄ Tools 双节点循环,`Command.goto` 路由
 - **Plan Mode** — 通过 `plan_mode_safe` 标志过滤只读工具
 - **Checkpoint & Resume** — PostgreSQL `PostgresSaver` 持久化对话
-- **真实 LLM 验证** — DeepSeek v4-flash / v4-pro 端到端跑通
+- **Audit Log** — 工具调用 / 节点流转 / compact 事件写到 `audit_events` 表,可重放可调优
+- **Token Usage 记账** — 每 LLM 调用写一行 `token_usage`,按模型聚合
+- **Auto-Compaction(LLM 摘要)** — `compact_check` graph 入口 + Celery 后台异步摘要;超出阈值自动 dispatch,下回合生效;支持无 reduction 检测
+- **Long-term Store** — `InMemoryStoreShim` 线程安全,namespace 隔离(`codeweave:global` / `codeweave:project`);Phase 4 换 PostgresStore
+- **Celery 异步** — `compact_thread` 任务(retry x3 + acks_late + 5min hard kill),60s token 聚合 + 7d compact_results 清理
+- **Alembic 迁移** — 首版 migration `0001_init_audit_compact_token` 建 3 张表 + 索引
+- **真实 LLM 验证** — DeepSeek v4-flash / v4-pro 端到端跑通(compact 摘要真调用 LLM 回写,116 单测 + 6 集成测)
 
-### 🔜 计划中(Phase 3–7)
+### 🔜 计划中(Phase 4–7)
 
-- **Auto-Compaction** — 上下文窗口管理 + 智能摘要(Phase 3)
-- **Sub-agents** — 通过 LangGraph `Send` 原语并行派发任务(Phase 3)
 - **SSE 流式输出** — FastAPI 逐 token 输出(Phase 4)
 - **Vue 3 Web SPA** — 主客户端(Phase 5)
 - **`cw` CLI** — 终端客户端(Phase 6)
 - **Skills & MCP** — Markdown skills + Model Context Protocol(Phase 7)
 - **Nginx + Docker Demo** — 一条命令启动生产环境(Phase 7)
+- **Coder / Reviewer LLM 实装** — 用工具调用写代码 + 跑 build/test 反馈(Phase 4 / Phase 7 视 FastAPI 拓扑需要而定)
 
 ## 🏗️ 架构
 
@@ -68,6 +73,7 @@
 
 - **[设计文档](docs/superpowers/specs/2026-07-08-codeweave-design.md)** — 完整架构 spec
 - **[Phase 2 Tool System 设计](docs/superpowers/specs/2026-07-08-phase2-tool-system-design.md)** — Tool System 设计 spec
+- **[Phase 3 Persistence + Celery 设计](docs/superpowers/specs/2026-07-08-phase3-persistence-celery-design.md)** — audit / store / compact 设计 spec
 - **Demo 脚本**(即将推出)
 - **API 参考**(Phase 4 FastAPI 自动生成)
 
@@ -84,12 +90,26 @@ uv sync --all-packages
 cp .env.example .env
 # 编辑 .env:设置 OPENAI_API_KEY=sk-... 和 MODEL_NAME=deepseek-v4-flash
 
-# 4. 跑测试(73 unit + 5 integration,约 1.5 秒)
-uv run --project backend python -m pytest backend/tests/
+# 4. 跑 Alembic 迁移(建 3 张表:audit_events / compact_results / token_usage)
+uv run --project backend alembic upgrade head
 
-# 5. 用真实 LLM 验证端到端
-#    预期输出:HumanMessage → AIMessage(tool_call) → ToolMessage → AIMessage(最终回答)
-cd D:/Mini_Code && PATH="$HOME/.cache/mimocode/bin:$PATH" uv run --project backend python -c "
+# 5. 跑测试(116 unit + 6 integration,约 5 秒)
+DATABASE_URL=postgresql+psycopg://codeweave:codeweave_dev@localhost:5432/codeweave_test \
+  uv run --project backend python -m pytest backend/tests/
+
+# 6. 真实 LLM 验证:端到端 compact(需要 Postgres + Redis + 真 API key)
+DATABASE_URL=... \
+  uv run --project backend --env-file .env \
+    python -m pytest backend/tests/integration/test_compact_real_llm.py -v -m llm
+
+# 7. 起 Celery worker(独立终端)
+uv run --project backend celery -A codeweave.tasks worker -Q codeweave -l info
+
+# 8. 起 Celery beat(独立终端,跑 60s token 聚合 + 7d cleanup)
+uv run --project backend celery -A codeweave.tasks beat -l info
+
+# 9. 用 ReAct tool 跑一遍读文件(无需 LLM,纯工具演示)
+cd D:/Mini_Code && uv run --project backend python -c "
 from codeweave.graphs.execute_graph import build_execute_graph
 from langgraph.checkpoint.memory import InMemorySaver
 from langchain_core.messages import HumanMessage
@@ -99,13 +119,10 @@ r = app.invoke(
      'todos': [], 'plan_mode': False, 'agent_history': []},
     config={'configurable': {'thread_id': 'demo'}, 'recursion_limit': 15},
 )
-print('agent_history:', [h['decision'] for h in r['agent_history']])
 print('final answer:', r['messages'][-1].content[:200])
 "
 
-# 6. 前端(Phase 5)/ CLI(Phase 6)— 即将推出
-# cd ../frontend && pnpm install && pnpm dev
-# cd ../cli && uv sync && cw
+# 10. 前端(Phase 5)/ CLI(Phase 6)— 即将推出
 ```
 
 **注意:** 所有 `uv run` 命令必须从**项目根目录** `D:/Mini_Code/` 运行(不能从 `backend/`),因为 `pydantic-settings` 按 CWD 解析 `.env`。
@@ -143,15 +160,21 @@ codeweave/
 ├── backend/
 │   ├── src/codeweave/
 │   │   ├── agents/     # supervisor / explorer / coder / reviewer / executor / compact
+│   │   │               # compact_check_node(Phase 3 接 execute_graph 入口)
+│   │   │               # coder / reviewer 仍占位,Phase 4+ LLM 接入
 │   │   ├── graphs/     # root / plan_graph / execute_graph
+│   │   │               # execute_graph START → compact_check ⇢ executor ⇄ tools
 │   │   ├── state/      # RootState / PlanState / ExecuteState + reducers
 │   │   ├── tools/      # ✅ registry + file_tools + bash_tools + todo_tools
-│   │   ├── persistence/  # PostgresSaver
+│   │   │               # 每个 tool 加 audit 装饰 emit tool_call 事件
+│   │   ├── persistence/  # PostgresSaver + audit.py(AuditLogger) + store.py(InMemoryStoreShim)
+│   │   ├── db/         # ✅ SQLAlchemy 2.x base + ORM + Alembic(3 张表 + partial unique)
 │   │   ├── config/     # Settings + model provider
-│   │   ├── api/        # (Phase 4) FastAPI routes
-│   │   ├── services/   # (Phase 4) Celery + token tracker
-│   │   └── prompts/    # (Phase 4) Jinja2 templates
-│   └── tests/          # 73 unit + 5 integration
+│   │   ├── services/   # ✅ token_tracker + compact_logic 纯函数
+│   │   ├── tasks/      # ✅ Celery + compact_thread + token_aggregate + cleanup
+│   │   ├── prompts/    # ✅ compact.jinja 中文摘要模板
+│   │   └── api/        # (Phase 4) FastAPI routes
+│   └── tests/          # 116 unit + 6 integration
 ├── frontend/          # (Phase 5) Vue 3 SPA
 ├── cli/               # (Phase 6) cw terminal client
 ├── skills/            # (Phase 7) Built-in Skills
